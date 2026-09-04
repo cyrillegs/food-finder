@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express, { type Request, type Response } from 'express';
 import { errorHandler } from './errorHandler';
+import { searchRouter } from '../modules/search/search.route';
 
 export function createApp() {
   const app = express();
@@ -12,11 +13,11 @@ export function createApp() {
     res.json({ status: 'ok' });
   });
 
-  // Module routers mount here (search, subscriptions, recent-searches - added
-  // in later modules), e.g.:
-  //   app.use('/api/search', searchRouter);
+  // Module routers mount here (subscriptions, recent-searches - added in
+  // later modules), e.g.:
   //   app.use('/api/subscriptions', subscriptionsRouter);
   //   app.use('/api/recent-searches', recentSearchesRouter);
+  app.use('/api/search', searchRouter);
 
   // Error handler must be registered last so it catches errors from every
   // route/middleware above it.
