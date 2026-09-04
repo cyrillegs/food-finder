@@ -21,3 +21,8 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# private planning material - not for the portfolio/public copy of this repo
+food-finder-plan.md
+docs/assignment*.pdf
+_move_log.txt
