@@ -1,0 +1,38 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: food-finder-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: food_finder
+      MYSQL_USER: food_finder
+      MYSQL_PASSWORD: food_finder
+    ports:
+      # Host:Container - non-default host port to avoid clashing with any
+      # local MySQL install. Update apps/api/.env DATABASE_URL if you change this.
+      - '3307:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # Runs once on first boot: creates the extra `food_finder_test` database
+      # alongside `food_finder` (which MYSQL_DATABASE above already creates).
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-prootpassword']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  adminer:
+    image: adminer:latest
+    container_name: food-finder-adminer
+    restart: unless-stopped
+    ports:
+      - '8082:8080'
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:

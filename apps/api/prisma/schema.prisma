@@ -1,0 +1,37 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// The CLI reads the connection URL from prisma.config.ts (Prisma 7 no longer
+// supports `url = env(...)` here). See apps/api/.env.example for DATABASE_URL.
+datasource db {
+  provider = "mysql"
+}
+
+// Using the classic (deprecated but still supported) prisma-client-js
+// generator so the client is importable as `@prisma/client`, matching the
+// module's dependency list, rather than the newer `prisma-client` generator
+// (ESM-only, custom output path). Note that in Prisma 7 BOTH generators
+// require a driver adapter at runtime for MySQL - see src/shared/prisma.ts,
+// which passes DATABASE_URL straight to @prisma/adapter-mariadb as a
+// connection string (no discrete host/user/password fields needed).
+generator client {
+  provider = "prisma-client-js"
+}
+
+model DemoUser {
+  id                   Int      @id @default(autoincrement())
+  email                String   @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  subscriptionStatus   String   @default("inactive")
+  createdAt            DateTime @default(now())
+}
+
+model RecentSearch {
+  id         Int      @id @default(autoincrement())
+  demoUserId Int
+  query      String
+  createdAt  DateTime @default(now())
+
+  @@index([demoUserId])
+}

@@ -1,0 +1,11 @@
+{
+  "name": "food-finder",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=@food-finder/api",
+    "dev:web": "npm run dev --workspace=@food-finder/web"
+  }
+}
