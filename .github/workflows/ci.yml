@@ -1,0 +1,87 @@
+# CI for Food Finder.
+#
+# `runs-on` reads a repository variable rather than a hardcoded value, on
+# purpose — the same pattern used for Delta's self-hosted runner. If the
+# runner is offline, mid-redeploy, or repointed at a different project (see
+# infra/runner/README.md), `runs-on` does not fail over: jobs just queue
+# forever with no error. A repo variable is a one-click revert; a workflow
+# edit needs a commit, which needs CI, which is the thing that stopped.
+#
+# Unset (the default) -> ubuntu-latest. Set CI_RUNNER=self-hosted only after
+# confirming the runner shows status=online for THIS repo:
+#   gh api repos/cyrillegs/food-finder/actions/runners --jq '.runners[]'
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: food_finder_test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -proot"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      DATABASE_URL: mysql://root:root@localhost:3306/food_finder_test
+      PORT: "4000"
+      CORS_ORIGIN: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Apply migrations
+        working-directory: apps/api
+        run: npx prisma migrate deploy
+
+      - name: Generate client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      - name: Test
+        working-directory: apps/api
+        run: npm test
+
+  web:
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # No test script exists in apps/web yet (Module 0/1 didn't add a
+      # frontend test runner) - build is the only real smoke check available
+      # right now. Add a `test` step here once one exists, don't invent one
+      # just to fill this in.
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
