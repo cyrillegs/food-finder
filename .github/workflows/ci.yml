@@ -61,9 +61,13 @@ jobs:
         working-directory: apps/api
         run: npx prisma generate
 
+      # --passWithNoTests: master has no test files yet as of this workflow's
+      # own PR (Module 1's search.test.ts is still on an unmerged branch) -
+      # a repo genuinely having zero tests isn't a CI failure, an actual
+      # failing test still is.
       - name: Test
         working-directory: apps/api
-        run: npm test
+        run: npm test -- --passWithNoTests
 
   web:
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
