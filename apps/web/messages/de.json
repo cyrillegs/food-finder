@@ -1,5 +1,17 @@
 {
   "common": {
     "title": "Food Finder"
+  },
+  "search": {
+    "heading": "Lebensmittel suchen",
+    "placeholder": "Nach Produktname oder Marke suchen",
+    "submitLabel": "Suchen",
+    "loadingLabel": "Suche läuft…",
+    "errorMessage": "Bei der Suche ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+    "emptyMessage": "Keine Produkte gefunden. Versuche eine andere Suche.",
+    "promptMessage": "Suche nach einem Produkt, um hier Ergebnisse zu sehen.",
+    "unnamedProduct": "Unbenanntes Produkt",
+    "unknownBrand": "Unbekannte Marke",
+    "noImageLabel": "Kein Bild"
   }
 }

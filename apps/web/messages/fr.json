@@ -1,5 +1,17 @@
 {
   "common": {
     "title": "Food Finder"
+  },
+  "search": {
+    "heading": "Rechercher un produit alimentaire",
+    "placeholder": "Rechercher par nom de produit ou marque",
+    "submitLabel": "Rechercher",
+    "loadingLabel": "Recherche en cours…",
+    "errorMessage": "Une erreur s'est produite pendant la recherche. Veuillez réessayer.",
+    "emptyMessage": "Aucun produit trouvé. Essayez une autre recherche.",
+    "promptMessage": "Recherchez un produit pour voir les résultats ici.",
+    "unnamedProduct": "Produit sans nom",
+    "unknownBrand": "Marque inconnue",
+    "noImageLabel": "Aucune image"
   }
 }

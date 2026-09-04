@@ -1,5 +1,17 @@
 {
   "common": {
     "title": "Food Finder"
+  },
+  "search": {
+    "heading": "Zoek een voedingsproduct",
+    "placeholder": "Zoek op productnaam of merk",
+    "submitLabel": "Zoeken",
+    "loadingLabel": "Bezig met zoeken…",
+    "errorMessage": "Er is iets misgegaan tijdens het zoeken. Probeer het opnieuw.",
+    "emptyMessage": "Geen producten gevonden. Probeer een andere zoekopdracht.",
+    "promptMessage": "Zoek naar een product om hier resultaten te zien.",
+    "unnamedProduct": "Naamloos product",
+    "unknownBrand": "Onbekend merk",
+    "noImageLabel": "Geen afbeelding"
   }
 }
