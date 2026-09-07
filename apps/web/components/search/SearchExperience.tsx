@@ -5,6 +5,7 @@ import { getRecentSearches, search, type RecentSearchEntry, type SearchProduct }
 import { SearchBox } from './SearchBox';
 import { ResultsGrid, type SearchStatus } from './ResultsGrid';
 import { RecentSearchesPanel } from '../recent-searches/RecentSearchesPanel';
+import { useAuth } from '../auth/AuthProvider';
 
 type SearchExperienceProps = {
   locale: string;
@@ -15,25 +16,38 @@ type SearchExperienceProps = {
 // app/[locale]/page.tsx so the page itself can stay a Server Component
 // (setRequestLocale needs that for next-intl's static rendering).
 export function SearchExperience({ locale }: SearchExperienceProps) {
+  const { user } = useAuth();
   const [results, setResults] = useState<SearchProduct[]>([]);
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [subscriptionActive, setSubscriptionActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState<RecentSearchEntry[]>([]);
 
-  // Recent Searches is a convenience panel, not core search - a failed fetch
-  // here shouldn't surface as a page-level error, it just leaves the panel
-  // showing whatever it last had (empty on first load).
+  // GET /api/searches/recent now requires a logged-in user (401s
+  // otherwise) - rather than let every anonymous visitor's page load
+  // trigger a call that's guaranteed to fail, this only fetches at all once
+  // `user` is known. RecentSearchesPanel gets `isLoggedIn` separately (see
+  // below) so it can render its own "log in to see your history" state
+  // rather than silently showing an empty list.
+  //
+  // Recent Searches is a convenience panel, not core search - a failed
+  // fetch here shouldn't surface as a page-level error, it just leaves the
+  // panel showing whatever it last had (empty on first load).
   const refreshRecentSearches = useCallback(async () => {
+    if (!user) {
+      setRecentSearches([]);
+      return;
+    }
     try {
       setRecentSearches(await getRecentSearches());
     } catch (err) {
       console.error('Failed to load recent searches:', err);
     }
-  }, []);
+  }, [user]);
 
-  // Fetched once on mount, then re-fetched after every completed search
-  // (below) so a just-completed search - or the dedup bump from re-running
-  // one already at the top of the list - shows up without a page reload.
+  // Re-fetched whenever auth state resolves/changes (login, logout) and
+  // after every completed search (below) so a just-completed search - or
+  // the dedup bump from re-running one already at the top of the list -
+  // shows up without a page reload.
   useEffect(() => {
     void refreshRecentSearches();
   }, [refreshRecentSearches]);
@@ -70,7 +84,7 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
       }
     >
       <SearchBox onSearch={handleSearch} isLoading={status === 'loading'} isHero={isHero} />
-      <RecentSearchesPanel searches={recentSearches} onSelect={handleSearch} isHero={isHero} />
+      <RecentSearchesPanel searches={recentSearches} onSelect={handleSearch} isLoggedIn={Boolean(user)} isHero={isHero} />
       <ResultsGrid results={results} status={status} locale={locale} subscriptionActive={subscriptionActive} />
     </section>
   );

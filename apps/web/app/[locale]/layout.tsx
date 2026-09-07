@@ -5,6 +5,8 @@ import type { Metadata } from 'next';
 import { Fraunces, IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import { routing } from '@/i18n/routing';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
+import { AuthProvider } from '@/components/auth/AuthProvider';
+import { AuthStatus } from '@/components/auth/AuthStatus';
 import type { ReactNode } from 'react';
 import '../globals.css';
 
@@ -68,13 +70,18 @@ export default async function LocaleLayout({ children, params }: Props) {
     <html lang={locale} className={`${fraunces.variable} ${spaceGrotesk.variable} ${ibmPlexMono.variable}`}>
       <body className="min-h-screen bg-paper font-sans text-ink antialiased">
         <NextIntlClientProvider>
-          <header className="mx-auto flex max-w-5xl items-center justify-between border-b border-ink/10 px-4 py-6 sm:px-6 lg:px-8">
-            <strong className="font-display text-xl font-medium tracking-tight text-ink sm:text-2xl">
-              Food Finder
-            </strong>
-            <LanguageSwitcher />
-          </header>
-          <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">{children}</main>
+          <AuthProvider>
+            <header className="mx-auto flex max-w-5xl items-center justify-between border-b border-ink/10 px-4 py-6 sm:px-6 lg:px-8">
+              <strong className="font-display text-xl font-medium tracking-tight text-ink sm:text-2xl">
+                Food Finder
+              </strong>
+              <div className="flex items-center gap-4">
+                <AuthStatus locale={locale} />
+                <LanguageSwitcher />
+              </div>
+            </header>
+            <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">{children}</main>
+          </AuthProvider>
         </NextIntlClientProvider>
       </body>
     </html>

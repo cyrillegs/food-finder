@@ -25,10 +25,22 @@
   },
   "recentSearches": {
     "heading": "Recherches récentes",
-    "emptyMessage": "Aucune recherche récente pour l'instant."
+    "emptyMessage": "Aucune recherche récente pour l'instant.",
+    "loginPromptMessage": "Connectez-vous pour voir votre historique de recherche."
+  },
+  "auth": {
+    "heading": "Connexion",
+    "emailLabel": "E-mail",
+    "passwordLabel": "Mot de passe",
+    "submitLabel": "Se connecter",
+    "loggingInLabel": "Connexion en cours…",
+    "loginErrorMessage": "E-mail ou mot de passe invalide.",
+    "loginLinkLabel": "Connexion",
+    "logoutLabel": "Déconnexion"
   },
   "subscriptions": {
     "subscribeButtonLabel": "S'abonner pour débloquer les infos nutritionnelles",
+    "subscribeLoginPromptLabel": "Se connecter pour s'abonner",
     "startingCheckoutLabel": "Démarrage du paiement…",
     "checkoutErrorMessage": "Une erreur s'est produite lors du démarrage du paiement. Veuillez réessayer.",
     "nutrimentsLockedMessage": "Les informations nutritionnelles sont réservées aux abonnés.",
