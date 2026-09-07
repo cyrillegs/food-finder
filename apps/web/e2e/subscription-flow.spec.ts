@@ -37,9 +37,14 @@ async function login(page: Page) {
   await page.waitForURL(/\/en$/);
 }
 
+// `exact: true` matters here: once this account has any recent-search
+// history, each entry's delete button carries an aria-label like `Remove
+// "<query>" from recent searches` - "searches" alone substring-matches
+// `{ name: 'Search' }` under Playwright's default non-exact matching,
+// so an unscoped lookup resolves to more than one element.
 async function search(page: Page, query: string) {
   await page.getByRole('searchbox', { name: 'Find a food product' }).fill(query);
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByText('Nutrition info is available to subscribers.').first()).toBeVisible({
     timeout: 15_000,
   });
@@ -87,7 +92,7 @@ test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async 
   await page.goto('/en');
   await page.waitForTimeout(3_000); // small buffer for the webhook to have landed
   await page.getByRole('searchbox', { name: 'Find a food product' }).fill('nutella');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   // Scoped to the first card specifically, not "nowhere on the page" - some
   // Open Food Facts products genuinely have no nutriment data at all
   // (same reason some have no image), so they show the same "subscribe to
