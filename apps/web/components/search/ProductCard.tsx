@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { SearchProduct } from '@/lib/api-client';
 import { NutrimentsPanel } from '../subscriptions/NutrimentsPanel';
@@ -18,15 +19,26 @@ export function ProductCard({ product, locale, subscriptionActive }: ProductCard
   const t = useTranslations('search');
   const name = product.name ?? t('unnamedProduct');
   const brand = product.brand ?? t('unknownBrand');
+  // OFF returning a URL doesn't guarantee the image is actually fetchable -
+  // their image CDN has real, observed outages independent of the search
+  // API itself, which still returns the URL fine. Without this, a failed
+  // fetch renders the browser's broken-image icon instead of falling back
+  // to the same "no image" treatment used when OFF has no image at all.
+  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <article className="flex flex-col gap-3">
       <div className="flex aspect-square items-center justify-center overflow-hidden bg-ink/4">
-        {product.imageUrl ? (
+        {product.imageUrl && !imageFailed ? (
           // eslint-disable-next-line @next/next/no-img-element -- remote OFF
           // images aren't configured in next.config.ts; a plain <img> avoids
           // needing to touch Module 0's build config for this module.
-          <img src={product.imageUrl} alt={name} className="max-h-full max-w-full object-contain" />
+          <img
+            src={product.imageUrl}
+            alt={name}
+            className="max-h-full max-w-full object-contain"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
           <span aria-hidden="true" className="text-sm text-muted">
             {t('noImageLabel')}
