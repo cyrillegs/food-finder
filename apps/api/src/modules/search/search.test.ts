@@ -4,22 +4,23 @@
 //
 // Also mocks the Prisma client: since Module 3, every /api/search request
 // passes through the Subscriptions module's gating middleware
-// (subscriptions.gate.ts, applied in shared/app.ts), which looks up
-// DemoUser.subscriptionStatus before the Search route ever runs. Mocking
-// Prisma here is the equivalent, for that dependency, of mocking `fetch` for
-// the OFF dependency above - neither should hit real infrastructure in this
-// suite. The "subscription active -> nutriments included" case lives in
-// subscriptions.test.ts instead, alongside the rest of that module's gating
-// coverage, rather than being duplicated here.
+// (subscriptions.gate.ts, applied in shared/app.ts), and since the
+// login/multi-user change, that gate (and Recent Searches' logging
+// middleware below) resolve "who's asking" via the Auth module's session
+// lookup - a session row keyed by a hashed cookie token, then the user row
+// it points at - rather than a hardcoded demo id. `prisma.session` and
+// `prisma.user` are mocked here so an anonymous request (no cookie) never
+// even reaches Prisma, and a request with a cookie resolves to whatever
+// this file configures.
 //
 // Since Module 5, the same request chain also passes through Recent
 // Searches' logging middleware (recent-searches.log.ts, also applied in
 // shared/app.ts), which calls prisma.recentSearch.findFirst/create/update as
-// a fire-and-forget side effect on a successful response. Those methods are
-// mocked here too so that side effect resolves instead of throwing against
-// an undefined `prisma.recentSearch` - the persistence/ordering/cap/dedup
-// behavior itself is covered in recent-searches.test.ts, not duplicated
-// here.
+// a fire-and-forget side effect on a successful response for a logged-in
+// user. Those methods are mocked here too so that side effect resolves
+// instead of throwing against an undefined `prisma.recentSearch` - the
+// persistence/ordering/cap/dedup behavior itself is covered in
+// recent-searches.test.ts, not duplicated here.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
@@ -27,13 +28,15 @@ import { app } from '../../shared/app';
 // vi.mock calls are hoisted above the imports above by Vitest, so
 // shared/app.ts (and, transitively, shared/prisma.ts) never sees the real
 // Prisma client in this file.
-const findUniqueMock = vi.fn();
+const sessionFindUniqueMock = vi.fn();
+const userFindUniqueMock = vi.fn();
 const recentSearchFindFirstMock = vi.fn();
 const recentSearchCreateMock = vi.fn();
 const recentSearchUpdateMock = vi.fn();
 vi.mock('../../shared/prisma', () => ({
   prisma: {
-    demoUser: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
+    session: { findUnique: (...args: unknown[]) => sessionFindUniqueMock(...args) },
+    user: { findUnique: (...args: unknown[]) => userFindUniqueMock(...args) },
     recentSearch: {
       findFirst: (...args: unknown[]) => recentSearchFindFirstMock(...args),
       create: (...args: unknown[]) => recentSearchCreateMock(...args),
@@ -41,6 +44,21 @@ vi.mock('../../shared/prisma', () => ({
     },
   },
 }));
+
+const SESSION_COOKIE = 'ff_session=test-session-token';
+
+// The exact token text is irrelevant - prisma.session.findUnique is mocked
+// directly rather than re-deriving a real hash, only that a cookie is
+// present or absent matters for the auth middleware's branching.
+function mockLoggedInAs(userId: number, subscriptionStatus: string) {
+  sessionFindUniqueMock.mockResolvedValue({
+    id: 1,
+    tokenHash: 'irrelevant-in-tests',
+    userId,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  userFindUniqueMock.mockResolvedValue({ id: userId, email: `user${userId}@food-finder.local`, subscriptionStatus });
+}
 
 function mockOffResponse(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
   const { ok = true, status = 200 } = init;
@@ -57,8 +75,9 @@ describe('GET /api/search', () => {
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    // Default: demo user isn't subscribed, matching this app's normal state.
-    findUniqueMock.mockResolvedValue({ id: 1, subscriptionStatus: 'inactive' });
+    // Default: no session cookie sent, matching an anonymous visitor -
+    // search stays open per the assignment brief, nutriments just come back
+    // locked (see subscriptions.gate.ts).
   });
 
   afterEach(() => {
@@ -81,7 +100,7 @@ describe('GET /api/search', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns normalized results for a successful search with full product data', async () => {
+  it('returns normalized results for an anonymous search, nutriments locked, with full product data otherwise', async () => {
     fetchMock.mockResolvedValueOnce(
       mockOffResponse({
         hits: [
@@ -92,10 +111,11 @@ describe('GET /api/search', () => {
             product_name_fr: 'Nutella',
             brands: ['Nutella', 'Ferrero'],
             image_url: 'https://images.openfoodfacts.org/nutella.jpg',
-            // OFF did return nutrition data for this product, but the demo
-            // user isn't subscribed (see beforeEach) - the Subscriptions
+            // OFF did return nutrition data for this product, but this is
+            // an anonymous request (no session cookie) - the Subscriptions
             // module's gate should strip this key entirely from the
-            // response below. The mirror case (subscribed -> included) is
+            // response below, the same as a logged-in-but-unsubscribed
+            // user would see. The mirror case (subscribed -> included) is
             // covered in subscriptions.test.ts.
             nutriments: { 'energy-kcal_100g': 539, fat_100g: 30.9 },
           },
@@ -137,17 +157,41 @@ describe('GET /api/search', () => {
     expect(requestedUrl.searchParams.get('q')).toBe('nutella');
     expect(requestedUrl.searchParams.get('langs')).toBe('en');
 
-    // Recent Searches' logging middleware (recent-searches.log.ts) records
-    // the search before the response above is actually sent, so this is
-    // already true by now. Full persistence/ordering/cap/dedup coverage
-    // lives in recent-searches.test.ts; this is just a smoke check that the
-    // hook is actually wired up for a real successful search.
-    expect(recentSearchCreateMock).toHaveBeenCalledWith({ data: { demoUserId: 1, query: 'nutella' } });
+    // An anonymous search - no session cookie above - never gets logged:
+    // there's no User row to attach it to. Full logged-in
+    // persistence/ordering/cap/dedup coverage lives in
+    // recent-searches.test.ts; this just confirms the anonymous case is a
+    // true no-op here.
+    expect(recentSearchCreateMock).not.toHaveBeenCalled();
 
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
     expect(requestInit.headers).toMatchObject({
       'User-Agent': expect.stringContaining('FoodFinder'),
     });
+  });
+
+  it('locks nutriments for a logged-in user whose subscription is not active, same as an anonymous request', async () => {
+    mockLoggedInAs(1, 'inactive');
+    fetchMock.mockResolvedValueOnce(
+      mockOffResponse({
+        hits: [{ code: '3017620422003', product_name: 'Nutella', nutriments: { 'energy-kcal_100g': 539 } }],
+        count: 1,
+        page: 1,
+        page_size: 24,
+        page_count: 1,
+      }),
+    );
+
+    const res = await request(app).get('/api/search').query({ q: 'nutella', locale: 'en' }).set('Cookie', SESSION_COOKIE);
+
+    expect(res.status).toBe(200);
+    expect(res.body.results[0]).not.toHaveProperty('nutriments');
+    expect(res.body.subscriptionActive).toBe(false);
+
+    // Unlike an anonymous search, a logged-in user's search IS recorded,
+    // even though their subscription isn't active - Recent Searches and
+    // Subscriptions gate independently.
+    expect(recentSearchCreateMock).toHaveBeenCalledWith({ data: { userId: 1, query: 'nutella' } });
   });
 
   it('falls back to another available language when the requested locale has no translation', async () => {

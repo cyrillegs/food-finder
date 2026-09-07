@@ -1,14 +1,23 @@
 // Wraps the Search module's response so nutriments are omitted entirely
-// (not present-but-null) unless the demo user's subscription is active.
+// (not present-but-null) unless the requesting user is logged in AND their
+// subscription is active.
 //
 // This lives in the Subscriptions module, not Search, so the dependency
 // points the way the plan describes: Subscriptions depends on Search's
 // response shape (imports its types below), Search has zero awareness of
 // Subscriptions. shared/app.ts mounts this middleware in front of
 // searchRouter rather than search.service.ts importing anything from here.
+//
+// Search itself stays open/anonymous (per the assignment brief - "everyone
+// can view basic information"), so this middleware runs on every search
+// request, logged in or not. getCurrentUser resolves to null for an
+// anonymous request (no session cookie) without throwing or requiring
+// auth - an anonymous searcher simply sees locked nutriments, same as
+// before, just via "no session" rather than "not subscribed" against a
+// hardcoded row that no longer exists.
 import type { NextFunction, Request, Response } from 'express';
 import type { SearchProduct, SearchResponseBody } from '../search/search.types';
-import { isNutrimentsUnlocked } from './subscriptions.service';
+import { getCurrentUser } from '../auth/auth.middleware';
 
 function omitNutriments(product: SearchProduct): SearchProduct {
   const { nutriments: _nutriments, ...rest } = product;
@@ -50,8 +59,9 @@ function looksLikeSearchResponseBody(body: unknown): body is SearchResponseBody 
 // whatever the Search route (mounted after this middleware) sends is gated
 // on the way out - the route itself needs no changes and no knowledge that
 // gating exists.
-export async function gateSearchNutriments(_req: Request, res: Response, next: NextFunction): Promise<void> {
-  const unlocked = await isNutrimentsUnlocked();
+export async function gateSearchNutriments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const user = await getCurrentUser(req);
+  const unlocked = user?.subscriptionStatus === 'active';
   const originalJson = res.json.bind(res);
 
   res.json = ((body: unknown) => {
