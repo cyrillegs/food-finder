@@ -41,7 +41,7 @@
   },
   "subscriptions": {
     "subscribeButtonLabel": "Abonnieren, um Nährwertangaben freizuschalten",
-    "subscribeLoginPromptLabel": "Anmelden, um zu abonnieren",
+    "subscribeLoginPromptLabel": "Anmelden, um Nährwertangaben freizuschalten",
     "startingCheckoutLabel": "Bezahlvorgang wird gestartet…",
     "checkoutErrorMessage": "Beim Starten des Bezahlvorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
     "nutrimentsLockedMessage": "Nährwertangaben sind nur für Abonnenten verfügbar.",

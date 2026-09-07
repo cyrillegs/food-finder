@@ -41,7 +41,7 @@
   },
   "subscriptions": {
     "subscribeButtonLabel": "Abonneer om voedingswaarden te ontgrendelen",
-    "subscribeLoginPromptLabel": "Log in om te abonneren",
+    "subscribeLoginPromptLabel": "Log in om voedingswaarden te ontgrendelen",
     "startingCheckoutLabel": "Afrekenen wordt gestart…",
     "checkoutErrorMessage": "Er is iets misgegaan bij het starten van het afrekenen. Probeer het opnieuw.",
     "nutrimentsLockedMessage": "Voedingswaarden zijn alleen beschikbaar voor abonnees.",

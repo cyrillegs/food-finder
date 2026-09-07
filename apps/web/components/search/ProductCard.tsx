@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { SearchProduct } from '@/lib/api-client';
 import { NutrimentsPanel } from '../subscriptions/NutrimentsPanel';
@@ -8,6 +8,15 @@ type ProductCardProps = {
   locale: string;
   subscriptionActive: boolean;
 };
+
+// How long to wait for an image before giving up and showing the "no
+// image" placeholder instead. Deliberately much shorter than a browser's
+// own connection timeout: confirmed live that a genuinely unreachable OFF
+// image host (a real, observed outage - see subscriptions.gate.ts's
+// sibling comment history) takes 15-30s for the browser to give up and
+// fire onError on its own, which is a bad wait for something that already
+// has a graceful fallback. This forces that fallback quickly instead.
+const IMAGE_LOAD_TIMEOUT_MS = 6000;
 
 // Name/brand/image, plus a nutrition section: NutrimentsPanel renders the
 // values when the API included them (subscribed demo user) or a
@@ -25,6 +34,26 @@ export function ProductCard({ product, locale, subscriptionActive }: ProductCard
   // fetch renders the browser's broken-image icon instead of falling back
   // to the same "no image" treatment used when OFF has no image at all.
   const [imageFailed, setImageFailed] = useState(false);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!product.imageUrl) {
+      return;
+    }
+    loadTimeoutRef.current = setTimeout(() => setImageFailed(true), IMAGE_LOAD_TIMEOUT_MS);
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, [product.imageUrl]);
+
+  function clearImageLoadTimeout() {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }
 
   return (
     <article className="flex flex-col gap-3">
@@ -37,7 +66,11 @@ export function ProductCard({ product, locale, subscriptionActive }: ProductCard
             src={product.imageUrl}
             alt={name}
             className="max-h-full max-w-full object-contain"
-            onError={() => setImageFailed(true)}
+            onLoad={clearImageLoadTimeout}
+            onError={() => {
+              clearImageLoadTimeout();
+              setImageFailed(true);
+            }}
           />
         ) : (
           <span aria-hidden="true" className="text-sm text-muted">
