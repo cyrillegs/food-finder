@@ -10,6 +10,12 @@
 // validates the key against Stripe) so `generateTestHeaderString` and the
 // webhook route's own `constructEvent` call exercise real signature
 // verification end to end, per the plan's instruction not to bypass it.
+//
+// Checkout is now behind requireAuth (see subscriptions.route.ts), and the
+// nutriments gate resolves "who's asking" via a session cookie rather than
+// a hardcoded id - both go through the Auth module's session lookup, so
+// `prisma.session` is mocked here too, alongside `prisma.user` (renamed
+// from `prisma.demoUser`).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
@@ -33,14 +39,18 @@ import type Stripe from 'stripe';
 // touches the network - so `generateTestHeaderString` and the webhook
 // route's own `constructEvent` call below exercise real signature
 // verification end to end, per the plan's instruction not to bypass it.
-const { demoUserMock, stripeMocks, realWebhooks } = vi.hoisted(() => {
+const { userMock, sessionMock, stripeMocks, realWebhooks } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const StripeCtor = require('stripe') as typeof Stripe;
   return {
-    demoUserMock: {
+    userMock: {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
+    },
+    sessionMock: {
+      findUnique: vi.fn(),
     },
     stripeMocks: {
       checkoutSessionsCreate: vi.fn(),
@@ -51,7 +61,7 @@ const { demoUserMock, stripeMocks, realWebhooks } = vi.hoisted(() => {
 });
 
 vi.mock('../../shared/prisma', () => ({
-  prisma: { demoUser: demoUserMock },
+  prisma: { user: userMock, session: sessionMock },
 }));
 
 vi.mock('./stripe-client', () => ({
@@ -63,6 +73,26 @@ vi.mock('./stripe-client', () => ({
 }));
 
 const WEBHOOK_SECRET = 'whsec_test_secret_for_unit_tests';
+const SESSION_COOKIE = 'ff_session=test-session-token';
+
+// The exact token text is irrelevant - prisma.session.findUnique is mocked
+// directly rather than re-deriving a real hash, only that a cookie is
+// present or absent at all matters for the auth middleware's branching.
+function mockLoggedInAs(userId: number, overrides: Record<string, unknown> = {}) {
+  sessionMock.findUnique.mockResolvedValue({
+    id: 1,
+    tokenHash: 'irrelevant-in-tests',
+    userId,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  userMock.findUnique.mockResolvedValue({
+    id: userId,
+    email: `user${userId}@food-finder.local`,
+    subscriptionStatus: 'inactive',
+    stripeCustomerId: null,
+    ...overrides,
+  });
+}
 
 function signedWebhookRequest(eventPayload: unknown) {
   const payload = JSON.stringify(eventPayload);
@@ -91,6 +121,7 @@ function fakeCheckoutSessionCompletedEvent(overrides: Record<string, unknown> = 
         customer: 'cus_test_1',
         subscription: 'sub_test_1',
         payment_status: 'paid',
+        client_reference_id: '1',
         ...overrides,
       },
     },
@@ -126,11 +157,22 @@ describe('Subscriptions module', () => {
   });
 
   describe('POST /api/subscriptions/checkout-session', () => {
-    it('creates a subscription-mode Checkout Session and returns its URL', async () => {
-      demoUserMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: null });
+    it('requires a logged-in user - 401 with no session cookie', async () => {
+      const res = await request(app).post('/api/subscriptions/checkout-session').send({ locale: 'en' });
+
+      expect(res.status).toBe(401);
+      expect(stripeMocks.checkoutSessionsCreate).not.toHaveBeenCalled();
+    });
+
+    it('creates a subscription-mode Checkout Session for the logged-in user and returns its URL', async () => {
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: null });
       stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session' });
 
-      const res = await request(app).post('/api/subscriptions/checkout-session').send({ locale: 'fr' });
+      const res = await request(app)
+        .post('/api/subscriptions/checkout-session')
+        .set('Cookie', SESSION_COOKIE)
+        .send({ locale: 'fr' });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ url: 'https://checkout.stripe.com/test-session' });
@@ -139,6 +181,7 @@ describe('Subscriptions module', () => {
           mode: 'subscription',
           line_items: [{ price: 'price_test_123', quantity: 1 }],
           customer: undefined,
+          client_reference_id: '1',
           success_url: 'http://localhost:3000/fr/subscribe/success',
           cancel_url: 'http://localhost:3000/fr/subscribe/cancel',
         }),
@@ -146,25 +189,41 @@ describe('Subscriptions module', () => {
     });
 
     it('reuses an existing Stripe customer id instead of letting Stripe create a new one', async () => {
-      demoUserMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_existing' });
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_existing' });
       stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session-2' });
 
-      await request(app).post('/api/subscriptions/checkout-session').send({});
+      await request(app).post('/api/subscriptions/checkout-session').set('Cookie', SESSION_COOKIE).send({});
 
       expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ customer: 'cus_existing' }),
+        expect.objectContaining({ customer: 'cus_existing', client_reference_id: '1' }),
       );
     });
 
     it('falls back to English when no/invalid locale is provided', async () => {
-      demoUserMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: null });
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: null });
       stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session-3' });
 
-      await request(app).post('/api/subscriptions/checkout-session').send({ locale: 'not-a-real-locale' });
+      await request(app)
+        .post('/api/subscriptions/checkout-session')
+        .set('Cookie', SESSION_COOKIE)
+        .send({ locale: 'not-a-real-locale' });
 
       expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({ success_url: 'http://localhost:3000/en/subscribe/success' }),
       );
+    });
+
+    it("scopes checkout to whichever user's session is presented, not a fixed id", async () => {
+      mockLoggedInAs(2);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 2, stripeCustomerId: null });
+      stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session-4' });
+
+      await request(app).post('/api/subscriptions/checkout-session').set('Cookie', SESSION_COOKIE).send({});
+
+      expect(userMock.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 2 } });
+      expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(expect.objectContaining({ client_reference_id: '2' }));
     });
   });
 
@@ -179,17 +238,18 @@ describe('Subscriptions module', () => {
         .send(payload);
 
       expect(res.status).toBe(400);
-      expect(demoUserMock.update).not.toHaveBeenCalled();
+      expect(userMock.update).not.toHaveBeenCalled();
     });
 
-    it('syncs stripeCustomerId/stripeSubscriptionId/subscriptionStatus on checkout.session.completed', async () => {
+    it('syncs stripeCustomerId/stripeSubscriptionId/subscriptionStatus onto the User named by client_reference_id on checkout.session.completed', async () => {
+      userMock.findUnique.mockResolvedValue({ id: 1 });
       stripeMocks.subscriptionsRetrieve.mockResolvedValue({ id: 'sub_test_1', status: 'active' });
 
-      const res = await signedWebhookRequest(fakeCheckoutSessionCompletedEvent());
+      const res = await signedWebhookRequest(fakeCheckoutSessionCompletedEvent({ client_reference_id: '1' }));
 
       expect(res.status).toBe(200);
       expect(stripeMocks.subscriptionsRetrieve).toHaveBeenCalledWith('sub_test_1');
-      expect(demoUserMock.update).toHaveBeenCalledWith({
+      expect(userMock.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: {
           stripeCustomerId: 'cus_test_1',
@@ -204,61 +264,79 @@ describe('Subscriptions module', () => {
 
       expect(res.status).toBe(200);
       expect(stripeMocks.subscriptionsRetrieve).not.toHaveBeenCalled();
-      expect(demoUserMock.update).not.toHaveBeenCalled();
+      expect(userMock.update).not.toHaveBeenCalled();
     });
 
-    it('syncs subscriptionStatus on customer.subscription.updated for the matching customer', async () => {
-      demoUserMock.findUnique.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_test_1', subscriptionStatus: 'active' });
+    it('ignores checkout.session.completed with no/invalid client_reference_id rather than guessing a user', async () => {
+      const res = await signedWebhookRequest(fakeCheckoutSessionCompletedEvent({ client_reference_id: null }));
+
+      expect(res.status).toBe(200);
+      expect(userMock.update).not.toHaveBeenCalled();
+    });
+
+    it('ignores checkout.session.completed when client_reference_id names a user that no longer exists', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+
+      const res = await signedWebhookRequest(fakeCheckoutSessionCompletedEvent({ client_reference_id: '999' }));
+
+      expect(res.status).toBe(200);
+      expect(stripeMocks.subscriptionsRetrieve).not.toHaveBeenCalled();
+      expect(userMock.update).not.toHaveBeenCalled();
+    });
+
+    it('syncs subscriptionStatus on customer.subscription.updated for the User matching the Stripe customer id', async () => {
+      userMock.findFirst.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_test_1', subscriptionStatus: 'active' });
 
       const res = await signedWebhookRequest(fakeSubscriptionEvent('customer.subscription.updated', { status: 'past_due' }));
 
       expect(res.status).toBe(200);
-      expect(demoUserMock.update).toHaveBeenCalledWith({
+      expect(userMock.findFirst).toHaveBeenCalledWith({ where: { stripeCustomerId: 'cus_test_1' } });
+      expect(userMock.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { stripeSubscriptionId: 'sub_test_1', subscriptionStatus: 'past_due' },
       });
     });
 
     it('syncs subscriptionStatus to canceled on customer.subscription.deleted', async () => {
-      demoUserMock.findUnique.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_test_1', subscriptionStatus: 'active' });
+      userMock.findFirst.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_test_1', subscriptionStatus: 'active' });
 
       const res = await signedWebhookRequest(fakeSubscriptionEvent('customer.subscription.deleted', { status: 'canceled' }));
 
       expect(res.status).toBe(200);
-      expect(demoUserMock.update).toHaveBeenCalledWith({
+      expect(userMock.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { stripeSubscriptionId: 'sub_test_1', subscriptionStatus: 'canceled' },
       });
     });
 
-    it('ignores a subscription event for a customer that does not match the stored DemoUser', async () => {
-      demoUserMock.findUnique.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_someone_else', subscriptionStatus: 'active' });
+    it('ignores a subscription event for a customer that does not match any User', async () => {
+      userMock.findFirst.mockResolvedValue(null);
 
       const res = await signedWebhookRequest(fakeSubscriptionEvent('customer.subscription.updated'));
 
       expect(res.status).toBe(200);
-      expect(demoUserMock.update).not.toHaveBeenCalled();
+      expect(userMock.update).not.toHaveBeenCalled();
     });
   });
 
   // Gating "on" case (subscription active -> nutriments included in the
-  // Search route's response). The "off"/default case is covered in
-  // search.test.ts, alongside the rest of that module's own suite - not
-  // duplicated here.
+  // Search route's response). The "off"/default case (both anonymous and
+  // logged-in-but-not-subscribed) is covered in search.test.ts, alongside
+  // the rest of that module's own suite - not duplicated here.
   describe('Search response gating (active subscription)', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
-      demoUserMock.findUnique.mockResolvedValue({ id: 1, subscriptionStatus: 'active' });
+      mockLoggedInAs(1, { subscriptionStatus: 'active' });
     });
 
     afterEach(() => {
       vi.unstubAllGlobals();
     });
 
-    it('includes nutriments in /api/search results when the demo user is subscribed', async () => {
+    it('includes nutriments in /api/search results when the logged-in user is subscribed', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -277,7 +355,7 @@ describe('Subscriptions module', () => {
         }),
       });
 
-      const res = await request(app).get('/api/search').query({ q: 'nutella', locale: 'en' });
+      const res = await request(app).get('/api/search').query({ q: 'nutella', locale: 'en' }).set('Cookie', SESSION_COOKIE);
 
       expect(res.status).toBe(200);
       expect(res.body.results[0].nutriments).toEqual({ 'energy-kcal_100g': 539 });

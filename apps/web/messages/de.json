@@ -25,10 +25,22 @@
   },
   "recentSearches": {
     "heading": "Letzte Suchanfragen",
-    "emptyMessage": "Du hast noch nicht gesucht."
+    "emptyMessage": "Du hast noch nicht gesucht.",
+    "loginPromptMessage": "Melde dich an, um deine Suchhistorie zu sehen."
+  },
+  "auth": {
+    "heading": "Anmelden",
+    "emailLabel": "E-Mail",
+    "passwordLabel": "Passwort",
+    "submitLabel": "Anmelden",
+    "loggingInLabel": "Anmeldung läuft…",
+    "loginErrorMessage": "Ungültige E-Mail-Adresse oder ungültiges Passwort.",
+    "loginLinkLabel": "Anmelden",
+    "logoutLabel": "Abmelden"
   },
   "subscriptions": {
     "subscribeButtonLabel": "Abonnieren, um Nährwertangaben freizuschalten",
+    "subscribeLoginPromptLabel": "Anmelden, um zu abonnieren",
     "startingCheckoutLabel": "Bezahlvorgang wird gestartet…",
     "checkoutErrorMessage": "Beim Starten des Bezahlvorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
     "nutrimentsLockedMessage": "Nährwertangaben sind nur für Abonnenten verfügbar.",

@@ -1,7 +1,13 @@
-// Middleware that logs a Search request as a recent search for the demo
-// user - a pure side effect that never touches the outgoing response body
-// (contrast with subscriptions.gate.ts, which rewrites it to strip
-// nutriments).
+// Middleware that logs a Search request as a recent search for the
+// currently logged-in user - a pure side effect that never touches the
+// outgoing response body (contrast with subscriptions.gate.ts, which
+// rewrites it to strip nutriments).
+//
+// Search itself stays open/anonymous, so this middleware runs on every
+// search request, logged in or not - but only a logged-in request actually
+// gets recorded. An anonymous search is skipped entirely: there's no User
+// row to attach it to, and per-visitor history is the whole point of this
+// module post-login, not something to fake with a session-only list.
 //
 // Architecture note: the plan's dependency direction is "Subscriptions
 // depends on Search, not the other way around" / "Search itself has no
@@ -11,8 +17,8 @@
 // established precedent: a middleware, owned by this module, that wraps
 // res.json and is applied in shared/app.ts in front of searchRouter. That
 // keeps Search itself unaware Recent Searches exists (same as it's unaware
-// Subscriptions exists), and keeps the two "wrap the Search response for a
-// side purpose" concerns symmetric - one middleware per concern, both
+// Subscriptions/Auth exist), and keeps the two "wrap the Search response
+// for a side purpose" concerns symmetric - one middleware per concern, both
 // mounted the same way - rather than one being a middleware and the other
 // reaching directly into search.route.ts.
 //
@@ -30,12 +36,14 @@
 // so if the record write and the search response raced each other, that
 // refetch could occasionally land before the row was committed and
 // silently miss the search the user just made. Waiting costs one extra
-// local DB round-trip - negligible next to the OFF request Search itself
-// just made - in exchange for the guarantee that once a client sees a
-// successful search response, asking for recent searches immediately after
-// is guaranteed to reflect it.
+// local DB round-trip (two now - resolving the session, then writing the
+// row) - negligible next to the OFF request Search itself just made - in
+// exchange for the guarantee that once a client sees a successful search
+// response, asking for recent searches immediately after is guaranteed to
+// reflect it.
 import type { NextFunction, Request, Response } from 'express';
 import { recordSearch } from './recent-searches.service';
+import { getCurrentUser } from '../auth/auth.middleware';
 
 interface SearchLikeBody {
   query: string;
@@ -51,20 +59,28 @@ function looksLikeSuccessfulSearchBody(body: unknown): body is SearchLikeBody {
   );
 }
 
-export function logRecentSearch(_req: Request, res: Response, next: NextFunction): void {
+export function logRecentSearch(req: Request, res: Response, next: NextFunction): void {
   const originalJson = res.json.bind(res);
 
   res.json = ((body: unknown) => {
     if (res.statusCode === 200 && looksLikeSuccessfulSearchBody(body)) {
       // res.json() itself still returns synchronously (matching Express's
       // normal contract - nothing here awaits this call), but the actual
-      // response send (originalJson) is deferred until the write settles.
-      // A failure to record is caught and swallowed (logged server-side
-      // only) via .finally, rather than surfaced - it must never turn an
+      // response send (originalJson) is deferred until this settles. A
+      // failure to record is caught and swallowed (logged server-side only)
+      // via .finally, rather than surfaced - it must never turn an
       // otherwise-successful search into a failed response, and there's no
       // reasonable way for a client to react to "your search worked but we
       // failed to remember it" anyway.
-      void recordSearch(body.query)
+      void getCurrentUser(req)
+        .then((user) => {
+          if (!user) {
+            // Anonymous search - nothing to attach it to, so this is
+            // intentionally not an error, just a no-op.
+            return;
+          }
+          return recordSearch(user.id, body.query);
+        })
         .catch((err) => {
           console.error('Failed to record recent search:', err);
         })

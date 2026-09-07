@@ -25,10 +25,22 @@
   },
   "recentSearches": {
     "heading": "Recent searches",
-    "emptyMessage": "No recent searches yet."
+    "emptyMessage": "No recent searches yet.",
+    "loginPromptMessage": "Log in to see your search history."
+  },
+  "auth": {
+    "heading": "Log in",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "submitLabel": "Log in",
+    "loggingInLabel": "Logging in…",
+    "loginErrorMessage": "Invalid email or password.",
+    "loginLinkLabel": "Log in",
+    "logoutLabel": "Log out"
   },
   "subscriptions": {
     "subscribeButtonLabel": "Subscribe to unlock nutrition info",
+    "subscribeLoginPromptLabel": "Log in to subscribe",
     "startingCheckoutLabel": "Starting checkout…",
     "checkoutErrorMessage": "Something went wrong while starting checkout. Please try again.",
     "nutrimentsLockedMessage": "Nutrition info is available to subscribers.",

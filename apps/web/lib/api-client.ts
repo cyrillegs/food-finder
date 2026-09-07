@@ -57,7 +57,12 @@ export async function search(query: string, locale: string, page = 1): Promise<S
 
   let response: globalThis.Response;
   try {
-    response = await fetch(url, { headers: { Accept: 'application/json' } });
+    // Search itself stays open/anonymous, but `credentials: 'include'` is
+    // still needed here: a logged-in visitor's session cookie is what lets
+    // the API's nutriments gate tell "logged in and subscribed" apart from
+    // "anonymous" (see apps/api's subscriptions.gate.ts) - without it, a
+    // subscribed user would see locked nutriments on every search.
+    response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   } catch {
     throw new SearchRequestError('Could not reach the search service.');
   }
@@ -80,9 +85,12 @@ export class CheckoutSessionRequestError extends Error {
   }
 }
 
-// Creates a Stripe Checkout Session for the demo user and returns its hosted
-// URL. Callers redirect the browser there directly
+// Creates a Stripe Checkout Session for the logged-in user and returns its
+// hosted URL. Callers redirect the browser there directly
 // (window.location.href = url) - see components/subscriptions/SubscribeButton.tsx.
+// Requires a logged-in user (the API 401s otherwise - see
+// apps/api/src/modules/subscriptions/subscriptions.route.ts), hence
+// `credentials: 'include'` to actually send the session cookie.
 export async function createCheckoutSession(locale: string): Promise<string> {
   if (!API_BASE_URL) {
     throw new CheckoutSessionRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
@@ -95,6 +103,7 @@ export async function createCheckoutSession(locale: string): Promise<string> {
     response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ locale }),
     });
   } catch {
@@ -128,9 +137,12 @@ export class RecentSearchesRequestError extends Error {
   }
 }
 
-// Fetches the demo user's most recent searches, newest first, already
+// Fetches the logged-in user's most recent searches, newest first, already
 // capped at 10 by the API (see recent-searches.service.ts) - nothing further
-// to cap or sort here.
+// to cap or sort here. Requires a logged-in user (the API 401s otherwise) -
+// callers should only invoke this when a user is known to be logged in (see
+// SearchExperience.tsx), hence `credentials: 'include'` to send the session
+// cookie.
 export async function getRecentSearches(): Promise<RecentSearchEntry[]> {
   if (!API_BASE_URL) {
     throw new RecentSearchesRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
@@ -140,7 +152,7 @@ export async function getRecentSearches(): Promise<RecentSearchEntry[]> {
 
   let response: globalThis.Response;
   try {
-    response = await fetch(url, { headers: { Accept: 'application/json' } });
+    response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   } catch {
     throw new RecentSearchesRequestError('Could not reach the recent searches service.');
   }
@@ -152,4 +164,105 @@ export async function getRecentSearches(): Promise<RecentSearchEntry[]> {
 
   const data = (await response.json()) as { results: RecentSearchEntry[] };
   return data.results;
+}
+
+// Mirrors apps/api/src/modules/auth/auth.service.ts's PublicUser - never
+// includes passwordHash or Stripe ids, only what the frontend needs to
+// reflect auth state and gate the Subscribe UI.
+export interface CurrentUser {
+  id: number;
+  email: string;
+  subscriptionStatus: string;
+}
+
+export class AuthRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'AuthRequestError';
+    this.status = status;
+  }
+}
+
+// Verifies credentials and, on success, establishes a session (the API sets
+// an httpOnly cookie on the response - nothing for this function to persist
+// itself). Throws AuthRequestError with a generic message on any failure;
+// the API deliberately never distinguishes "wrong password" from "unknown
+// email" in its response, so neither does this.
+export async function login(email: string, password: string): Promise<CurrentUser> {
+  if (!API_BASE_URL) {
+    throw new AuthRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
+  }
+
+  const url = new URL('/api/auth/login', API_BASE_URL);
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new AuthRequestError('Could not reach the login service.');
+  }
+
+  if (!response.ok) {
+    const body: { error?: { message?: string } } | null = await response.json().catch(() => null);
+    throw new AuthRequestError(body?.error?.message ?? 'Login failed.', response.status);
+  }
+
+  const data = (await response.json()) as { user: CurrentUser };
+  return data.user;
+}
+
+// Ends the current session server-side (deletes the Session row and clears
+// the cookie). Always "succeeds" from the caller's perspective the same way
+// the API's own /logout does - there's nothing meaningful to do differently
+// if it fails, so this never throws; a network failure just means the
+// cookie may still be around until it expires on its own.
+export async function logout(): Promise<void> {
+  if (!API_BASE_URL) {
+    return;
+  }
+
+  const url = new URL('/api/auth/logout', API_BASE_URL);
+  try {
+    await fetch(url, { method: 'POST', headers: { Accept: 'application/json' }, credentials: 'include' });
+  } catch {
+    // Best-effort - see comment above.
+  }
+}
+
+// Resolves the current session, if any. Returns null for "not logged in"
+// (a 401 from the API) rather than throwing - that's an expected, common
+// state (every anonymous visitor starts this way), not an error condition.
+// Only a genuine failure (network error, unexpected server error) throws.
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  if (!API_BASE_URL) {
+    throw new AuthRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
+  }
+
+  const url = new URL('/api/auth/me', API_BASE_URL);
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
+  } catch {
+    throw new AuthRequestError('Could not reach the auth service.');
+  }
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const body: { error?: { message?: string } } | null = await response.json().catch(() => null);
+    throw new AuthRequestError(body?.error?.message ?? 'Failed to load the current user.', response.status);
+  }
+
+  const data = (await response.json()) as { user: CurrentUser };
+  return data.user;
 }

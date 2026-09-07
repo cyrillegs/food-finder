@@ -7,11 +7,24 @@ import { webhookRouter } from '../modules/subscriptions/webhook.route';
 import { gateSearchNutriments } from '../modules/subscriptions/subscriptions.gate';
 import { recentSearchesRouter } from '../modules/recent-searches/recent-searches.route';
 import { logRecentSearch } from '../modules/recent-searches/recent-searches.log';
+import { authRouter } from '../modules/auth/auth.route';
 
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000' }));
+  // `credentials: true` is required for the browser to actually send/accept
+  // the session cookie on cross-origin requests from apps/web (fetch calls
+  // there use `credentials: 'include'` - see lib/api-client.ts). Per the
+  // CORS spec, `credentials: true` cannot be combined with a wildcard
+  // origin - `origin` here was already a specific configured value before
+  // auth existed (not '*'), so this only adds the flag, it doesn't need to
+  // change how the origin itself is resolved.
+  app.use(
+    cors({
+      origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+      credentials: true,
+    }),
+  );
 
   // Stripe webhook signature verification needs the raw, unparsed request
   // body. This router is mounted BEFORE the global express.json() below -
@@ -37,6 +50,7 @@ export function createApp() {
   // see recent-searches.log.ts for why this lives here rather than inside
   // search.route.ts. Order between the two middlewares doesn't matter (each
   // wraps whatever res.json currently is), so they're listed in mount order.
+  app.use('/api/auth', authRouter);
   app.use('/api/search', gateSearchNutriments, logRecentSearch, searchRouter);
   app.use('/api/subscriptions', subscriptionsRouter);
   app.use('/api/searches/recent', recentSearchesRouter);

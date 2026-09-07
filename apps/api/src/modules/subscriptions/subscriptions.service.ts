@@ -1,19 +1,19 @@
-// Stripe integration for the one DemoUser this app ever acts as (see
-// prisma/schema.prisma - DemoUser id 1, seeded in Module 0). No auth, no
-// multi-tenancy: every function here reads/writes that single row.
+// Stripe integration, now scoped per authenticated User instead of the one
+// hardcoded DemoUser row (see prisma/schema.prisma). Every function here
+// takes the acting user's id explicitly rather than assuming a fixed one -
+// callers (subscriptions.route.ts, webhook.route.ts) are responsible for
+// resolving that id (via the auth middleware, or via Stripe identifiers for
+// the webhook).
 //
-// The Stripe customer is deliberately NOT created eagerly in
-// createCheckoutSession - if DemoUser.stripeCustomerId is unset, `customer`
-// is simply omitted from the Checkout Session params and Stripe creates one
-// for us. We only learn (and persist) that customer id once the webhook
-// fires, so there's one source of truth for "a real subscription attempt
-// happened": the webhook, not the button click.
+// The Stripe customer is still deliberately NOT created eagerly in
+// createCheckoutSession - if the user's stripeCustomerId is unset,
+// `customer` is simply omitted from the Checkout Session params and Stripe
+// creates one for us. We only learn (and persist) that customer id once the
+// webhook fires, so there's one source of truth for "a real subscription
+// attempt happened": the webhook, not the button click.
 import { prisma } from '../../shared/prisma';
 import { getStripeClient } from './stripe-client';
 import type Stripe from 'stripe';
-
-// Matches the single seeded row from apps/api/prisma/seed.ts.
-const DEMO_USER_ID = 1;
 
 function resolveStripeId(value: string | { id: string } | null | undefined): string | null {
   if (!value) {
@@ -22,18 +22,19 @@ function resolveStripeId(value: string | { id: string } | null | undefined): str
   return typeof value === 'string' ? value : value.id;
 }
 
-// Creates a subscription-mode Checkout Session for the demo user and returns
-// its hosted URL. `webOrigin` and `locale` are supplied by the route (not
-// read from env here) so this stays testable without stubbing request
-// context; the route resolves webOrigin from CORS_ORIGIN, which already
-// represents "the web app's origin" in both local and deployed config.
-export async function createCheckoutSession(webOrigin: string, locale: string): Promise<string> {
+// Creates a subscription-mode Checkout Session for the given user and
+// returns its hosted URL. `webOrigin` and `locale` are supplied by the
+// route (not read from env here) so this stays testable without stubbing
+// request context; the route resolves webOrigin from CORS_ORIGIN, which
+// already represents "the web app's origin" in both local and deployed
+// config.
+export async function createCheckoutSession(webOrigin: string, locale: string, userId: number): Promise<string> {
   const priceId = process.env.STRIPE_PRICE_ID;
   if (!priceId) {
     throw new Error('STRIPE_PRICE_ID is not configured.');
   }
 
-  const demoUser = await prisma.demoUser.findUniqueOrThrow({ where: { id: DEMO_USER_ID } });
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   const stripe = getStripeClient();
 
   const session = await stripe.checkout.sessions.create({
@@ -41,7 +42,16 @@ export async function createCheckoutSession(webOrigin: string, locale: string): 
     line_items: [{ price: priceId, quantity: 1 }],
     // Reuse the existing Stripe customer if we've already learned one via a
     // prior webhook; otherwise leave this unset and let Stripe create one.
-    customer: demoUser.stripeCustomerId ?? undefined,
+    customer: user.stripeCustomerId ?? undefined,
+    // Attributes this Checkout Session back to the initiating User, so
+    // handleCheckoutSessionCompleted below can persist the resulting
+    // customer/subscription ids onto the right row. This matters
+    // specifically for a first-time subscriber: `customer` above is unset
+    // for them, so Stripe mints a brand-new customer id during Checkout
+    // that the webhook has never seen before and has no other way to match
+    // back to a User (a returning subscriber's existing stripeCustomerId
+    // would have worked for that, but a new one obviously can't).
+    client_reference_id: String(user.id),
     success_url: `${webOrigin}/${locale}/subscribe/success`,
     cancel_url: `${webOrigin}/${locale}/subscribe/cancel`,
   });
@@ -51,13 +61,6 @@ export async function createCheckoutSession(webOrigin: string, locale: string): 
   }
 
   return session.url;
-}
-
-// Gating predicate used by the Search module wrapper (subscriptions.gate.ts)
-// to decide whether to include nutriments in a Search response.
-export async function isNutrimentsUnlocked(): Promise<boolean> {
-  const demoUser = await prisma.demoUser.findUnique({ where: { id: DEMO_USER_ID } });
-  return demoUser?.subscriptionStatus === 'active';
 }
 
 // checkout.session.completed is where we first learn the Stripe customer id
@@ -76,15 +79,25 @@ export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Se
 
   const customerId = resolveStripeId(session.customer);
   const subscriptionId = resolveStripeId(session.subscription);
-  if (!customerId || !subscriptionId) {
+  const userId = session.client_reference_id ? Number(session.client_reference_id) : NaN;
+  if (!customerId || !subscriptionId || !Number.isInteger(userId)) {
+    return;
+  }
+
+  // Guard against a tampered/stale client_reference_id (or a test event
+  // referencing a user that no longer exists) rather than letting a plain
+  // `update` throw on a missing row - a webhook handler failing loudly here
+  // would make Stripe retry the same undeliverable event indefinitely.
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
     return;
   }
 
   const stripe = getStripeClient();
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-  await prisma.demoUser.update({
-    where: { id: DEMO_USER_ID },
+  await prisma.user.update({
+    where: { id: userId },
     data: {
       stripeCustomerId: customerId,
       stripeSubscriptionId: subscriptionId,
@@ -103,24 +116,26 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
 
 // Shared by both customer.subscription.updated and .deleted - both just mean
 // "here is this subscription's current status", including the terminal
-// `canceled` status that .deleted events carry.
+// `canceled` status that .deleted events carry. Unlike
+// handleCheckoutSessionCompleted, these events carry no client_reference_id
+// (they're Subscription objects, not Checkout Sessions) - by the time either
+// of these fires, the owning User's stripeCustomerId has already been set by
+// a prior checkout.session.completed, so matching on that is the only
+// signal available, and the right one: it's how we find "the right User" now
+// that there isn't a single hardcoded one.
 async function syncSubscriptionStatus(subscription: Stripe.Subscription): Promise<void> {
   const customerId = resolveStripeId(subscription.customer);
   if (!customerId) {
     return;
   }
 
-  // Guard against a stray event for some other Stripe customer (e.g. one
-  // sent from the Dashboard's "send test webhook" while testing) landing
-  // here and overwriting the one DemoUser row based on an unrelated
-  // subscription.
-  const demoUser = await prisma.demoUser.findUnique({ where: { id: DEMO_USER_ID } });
-  if (!demoUser || demoUser.stripeCustomerId !== customerId) {
+  const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+  if (!user) {
     return;
   }
 
-  await prisma.demoUser.update({
-    where: { id: DEMO_USER_ID },
+  await prisma.user.update({
+    where: { id: user.id },
     data: {
       stripeSubscriptionId: subscription.id,
       subscriptionStatus: subscription.status,

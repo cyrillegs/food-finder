@@ -18,20 +18,46 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model DemoUser {
+// Replaces DemoUser (Modules 0-5's single hardcoded row) with real,
+// per-visitor accounts - see apps/api/src/modules/auth for the module that
+// reads/writes this. Shape deliberately mirrors DemoUser's own
+// (stripeCustomerId/stripeSubscriptionId/subscriptionStatus) plus
+// passwordHash, so Subscriptions' existing field-level logic barely had to
+// change - only the "which row" lookup changed, from a hardcoded id to the
+// authenticated request's user.
+model User {
   id                   Int      @id @default(autoincrement())
   email                String   @unique
+  passwordHash         String
   stripeCustomerId     String?
   stripeSubscriptionId String?
   subscriptionStatus   String   @default("inactive")
   createdAt            DateTime @default(now())
 }
 
-model RecentSearch {
-  id         Int      @id @default(autoincrement())
-  demoUserId Int
-  query      String
-  createdAt  DateTime @default(now())
+// DB-backed session storage (see apps/api/src/modules/auth/auth.service.ts
+// for the "why a session table instead of a JWT" reasoning). `tokenHash` is
+// a SHA-256 hash of the random session token the cookie actually carries -
+// the raw token is never persisted, the same defense-in-depth principle as
+// not storing plaintext passwords: a DB read/leak alone can't be replayed as
+// a valid session cookie. No @relation to User (matching this project's
+// existing style - see RecentSearch below, which never had one back to
+// DemoUser either) - `userId` is just a plain scoping column with an index.
+model Session {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-  @@index([demoUserId])
+  @@index([userId])
+}
+
+model RecentSearch {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  query     String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

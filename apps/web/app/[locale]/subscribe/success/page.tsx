@@ -8,8 +8,8 @@ type Props = {
 // Gating is enforced entirely through the Search response (see
 // apps/api's subscriptions.gate.ts) - there's no separate "subscribed?"
 // flag for this page to poll or refetch. "Refetch status on return" just
-// means: the next search this demo user makes will naturally reflect the
-// new DemoUser.subscriptionStatus, because the API re-checks it on every
+// means: the next search this logged-in user makes will naturally reflect
+// the new User.subscriptionStatus, because the API re-checks it on every
 // request. So this page only needs to confirm success and send the user
 // back to search - nothing more to build here.
 export default async function SubscribeSuccessPage({ params }: Props) {
