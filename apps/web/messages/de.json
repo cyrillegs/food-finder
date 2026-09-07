@@ -28,6 +28,7 @@
     "startingCheckoutLabel": "Bezahlvorgang wird gestartet…",
     "checkoutErrorMessage": "Beim Starten des Bezahlvorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
     "nutrimentsLockedMessage": "Nährwertangaben sind nur für Abonnenten verfügbar.",
+    "nutrimentsUnavailableMessage": "Für dieses Produkt sind keine Nährwertangaben verfügbar.",
     "nutrimentLabels": {
       "energyKcal": "Energie (kcal)",
       "fat": "Fett",

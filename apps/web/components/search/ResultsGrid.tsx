@@ -8,9 +8,10 @@ type ResultsGridProps = {
   results: SearchProduct[];
   status: SearchStatus;
   locale: string;
+  subscriptionActive: boolean;
 };
 
-export function ResultsGrid({ results, status, locale }: ResultsGridProps) {
+export function ResultsGrid({ results, status, locale, subscriptionActive }: ResultsGridProps) {
   const t = useTranslations('search');
 
   if (status === 'idle') {
@@ -40,7 +41,7 @@ export function ResultsGrid({ results, status, locale }: ResultsGridProps) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-x-8 gap-y-12">
       {results.map((product) => (
-        <ProductCard key={product.code} product={product} locale={locale} />
+        <ProductCard key={product.code} product={product} locale={locale} subscriptionActive={subscriptionActive} />
       ))}
     </div>
   );

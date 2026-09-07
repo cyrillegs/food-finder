@@ -27,6 +27,13 @@ export interface SearchResponse {
   totalCount: number;
   totalPages: number;
   results: SearchProduct[];
+  // Whether the demo user's subscription is currently active - distinct from
+  // whether any given product happens to have `nutriments`. A subscribed
+  // user searching for a product Open Food Facts has no nutrition data for
+  // at all still has an active subscription; the UI needs this flag to tell
+  // that case apart from "not subscribed", since both look identical if you
+  // only check for the presence of `nutriments` on a product.
+  subscriptionActive: boolean;
 }
 
 export class SearchRequestError extends Error {

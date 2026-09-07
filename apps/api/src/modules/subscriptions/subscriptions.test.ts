@@ -281,6 +281,7 @@ describe('Subscriptions module', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.results[0].nutriments).toEqual({ 'energy-kcal_100g': 539 });
+      expect(res.body.subscriptionActive).toBe(true);
     });
   });
 
@@ -295,14 +296,32 @@ describe('Subscriptions module', () => {
       results: [{ code: '123', name: 'Thing', brand: null, imageUrl: null, nutriments: { fat_100g: 1 } }],
     };
 
-    it('strips nutriments entirely when locked', () => {
+    it('strips nutriments entirely when locked, and reports subscriptionActive: false', () => {
       const gated = applyNutrimentsGate(body, false);
       expect(gated.results[0]).not.toHaveProperty('nutriments');
+      expect(gated.subscriptionActive).toBe(false);
     });
 
-    it('leaves the body untouched when unlocked', () => {
+    it('leaves results untouched when unlocked, and reports subscriptionActive: true', () => {
       const gated = applyNutrimentsGate(body, true);
-      expect(gated).toBe(body);
+      expect(gated.results).toBe(body.results);
+      expect(gated.subscriptionActive).toBe(true);
+    });
+
+    // The bug this flag exists to fix: a subscribed user searching for a
+    // product Open Food Facts genuinely has no nutrition data for (not
+    // uncommon - the same reason some products have no image) must be able
+    // to tell "nothing to unlock" apart from "you're not subscribed" using
+    // subscriptionActive, since a missing `nutriments` key looks identical
+    // in both cases otherwise.
+    it('reports subscriptionActive: true even for a product with no nutriments to begin with', () => {
+      const bodyWithGap: SearchResponseBody = {
+        ...body,
+        results: [{ code: '456', name: 'No-data thing', brand: null, imageUrl: null }],
+      };
+      const gated = applyNutrimentsGate(bodyWithGap, true);
+      expect(gated.results[0]).not.toHaveProperty('nutriments');
+      expect(gated.subscriptionActive).toBe(true);
     });
   });
 });

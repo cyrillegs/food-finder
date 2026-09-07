@@ -16,6 +16,7 @@ type SearchExperienceProps = {
 export function SearchExperience({ locale }: SearchExperienceProps) {
   const [results, setResults] = useState<SearchProduct[]>([]);
   const [status, setStatus] = useState<SearchStatus>('idle');
+  const [subscriptionActive, setSubscriptionActive] = useState(false);
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -23,6 +24,7 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
       try {
         const response = await search(query, locale);
         setResults(response.results);
+        setSubscriptionActive(response.subscriptionActive);
         setStatus('success');
       } catch (err) {
         console.error('Search failed:', err);
@@ -47,7 +49,7 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
       }
     >
       <SearchBox onSearch={handleSearch} isLoading={status === 'loading'} isHero={isHero} />
-      <ResultsGrid results={results} status={status} locale={locale} />
+      <ResultsGrid results={results} status={status} locale={locale} subscriptionActive={subscriptionActive} />
     </section>
   );
 }

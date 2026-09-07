@@ -5,6 +5,7 @@ import { NutrimentsPanel } from '../subscriptions/NutrimentsPanel';
 type ProductCardProps = {
   product: SearchProduct;
   locale: string;
+  subscriptionActive: boolean;
 };
 
 // Name/brand/image, plus a nutrition section: NutrimentsPanel renders the
@@ -13,7 +14,7 @@ type ProductCardProps = {
 // components/subscriptions/NutrimentsPanel.tsx. Gating itself is enforced
 // server-side (apps/api's subscriptions.gate.ts strips the field entirely),
 // this component just renders whatever it's given.
-export function ProductCard({ product, locale }: ProductCardProps) {
+export function ProductCard({ product, locale, subscriptionActive }: ProductCardProps) {
   const t = useTranslations('search');
   const name = product.name ?? t('unnamedProduct');
   const brand = product.brand ?? t('unknownBrand');
@@ -36,7 +37,7 @@ export function ProductCard({ product, locale }: ProductCardProps) {
         <strong className="font-sans text-lg font-medium text-ink">{name}</strong>
         <span className="text-sm text-muted">{brand}</span>
       </div>
-      <NutrimentsPanel product={product} locale={locale} />
+      <NutrimentsPanel product={product} locale={locale} subscriptionActive={subscriptionActive} />
     </article>
   );
 }

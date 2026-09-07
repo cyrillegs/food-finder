@@ -5,6 +5,7 @@ import { SubscribeButton } from './SubscribeButton';
 type NutrimentsPanelProps = {
   product: SearchProduct;
   locale: string;
+  subscriptionActive: boolean;
 };
 
 // Open Food Facts' nutriments object has dozens of possible keys - this only
@@ -21,16 +22,32 @@ const DISPLAYED_NUTRIMENTS: Array<{ key: string; labelKey: string }> = [
   { key: 'salt_100g', labelKey: 'salt' },
 ];
 
-// Shown on every ProductCard. When `product.nutriments` is present (demo
-// user is subscribed - see apps/api's subscriptions.gate.ts, which is what
-// actually enforces this server-side) it renders the values; otherwise it
-// shows a locked message plus a way to subscribe, rather than hiding the
-// section entirely, so the value of subscribing is visible right where it
-// matters.
-export function NutrimentsPanel({ product, locale }: NutrimentsPanelProps) {
+// Shown on every ProductCard. Three distinct states, not two - `nutriments`
+// being absent is ambiguous on its own:
+//   1. subscriptionActive: false, no nutriments -> locked: redacted-bars
+//      treatment + a way to subscribe (the "real data exists, hidden" case).
+//   2. subscriptionActive: true, nutriments present -> render the values.
+//   3. subscriptionActive: true, no nutriments -> Open Food Facts simply
+//      never had nutrition data for this specific product (not uncommon -
+//      the same reason some products have no image). A subscribed user
+//      still saw a "Subscribe to unlock" button here before this was fixed,
+//      which did nothing useful since there was nothing to unlock. This
+//      state gets its own plain message and no subscribe button, and
+//      deliberately skips the redacted-bars treatment too - those bars
+//      visually claim "there's real data underneath", which would be
+//      actively misleading when there genuinely isn't any.
+export function NutrimentsPanel({ product, locale, subscriptionActive }: NutrimentsPanelProps) {
   const t = useTranslations('subscriptions');
 
   if (!product.nutriments) {
+    if (subscriptionActive) {
+      return (
+        <div className="mt-3 border-t-4 border-ink pt-3">
+          <p className="text-sm text-muted">{t('nutrimentsUnavailableMessage')}</p>
+        </div>
+      );
+    }
+
     return (
       <div className="mt-3 border-t-4 border-ink pt-3">
         {/* Decorative: a visual suggestion of redacted nutrient rows, not a

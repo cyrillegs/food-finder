@@ -28,6 +28,7 @@
     "startingCheckoutLabel": "Afrekenen wordt gestart…",
     "checkoutErrorMessage": "Er is iets misgegaan bij het starten van het afrekenen. Probeer het opnieuw.",
     "nutrimentsLockedMessage": "Voedingswaarden zijn alleen beschikbaar voor abonnees.",
+    "nutrimentsUnavailableMessage": "Voedingswaarden zijn niet beschikbaar voor dit product.",
     "nutrimentLabels": {
       "energyKcal": "Energie (kcal)",
       "fat": "Vet",
