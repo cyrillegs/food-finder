@@ -44,15 +44,18 @@ const USER_AGENT = 'FoodFinder/0.1 (https://github.com/cyrillegs/food-finder)';
 const REQUEST_TIMEOUT_MS = 7000;
 
 // Only request the fields this module (and the normalization fallback logic
-// below) actually needs. `nutriments` is deliberately NOT requested here -
-// this module never surfaces it; Module 2 can extend this list and the
-// serializer together when nutrition data actually needs to flow through.
+// below) actually needs. `nutriments` is requested and passed through
+// unmodified in the normalized product (see normalizeProduct below) - the
+// Subscriptions module is responsible for stripping it back out of the
+// Search route's response when the demo user isn't subscribed, not this
+// module.
 const REQUESTED_FIELDS = [
   'code',
   'product_name',
   ...SUPPORTED_LOCALES.map((locale) => `product_name_${locale}`),
   'brands',
   'image_url',
+  'nutriments',
 ].join(',');
 
 export class SearchUpstreamError extends Error {
@@ -190,10 +193,18 @@ function normalizeProduct(hit: OffSearchHit, locale: SupportedLocale): SearchPro
     return null;
   }
 
+  const nutriments =
+    hit.nutriments && typeof hit.nutriments === 'object' && !Array.isArray(hit.nutriments) ? hit.nutriments : undefined;
+
   return {
     code: hit.code,
     name: resolveName(hit, locale),
     brand: resolveBrand(hit),
     imageUrl: typeof hit.image_url === 'string' && hit.image_url.trim().length > 0 ? hit.image_url : null,
+    // Spread conditionally rather than always assigning `nutriments:
+    // undefined` so the key is omitted entirely when OFF didn't return any -
+    // consistent with how gating removes it later (present-with-data or
+    // absent, never present-but-null).
+    ...(nutriments ? { nutriments } : {}),
   };
 }
