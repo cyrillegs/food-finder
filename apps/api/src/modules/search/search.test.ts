@@ -11,6 +11,15 @@
 // suite. The "subscription active -> nutriments included" case lives in
 // subscriptions.test.ts instead, alongside the rest of that module's gating
 // coverage, rather than being duplicated here.
+//
+// Since Module 5, the same request chain also passes through Recent
+// Searches' logging middleware (recent-searches.log.ts, also applied in
+// shared/app.ts), which calls prisma.recentSearch.findFirst/create/update as
+// a fire-and-forget side effect on a successful response. Those methods are
+// mocked here too so that side effect resolves instead of throwing against
+// an undefined `prisma.recentSearch` - the persistence/ordering/cap/dedup
+// behavior itself is covered in recent-searches.test.ts, not duplicated
+// here.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
@@ -19,8 +28,18 @@ import { app } from '../../shared/app';
 // shared/app.ts (and, transitively, shared/prisma.ts) never sees the real
 // Prisma client in this file.
 const findUniqueMock = vi.fn();
+const recentSearchFindFirstMock = vi.fn();
+const recentSearchCreateMock = vi.fn();
+const recentSearchUpdateMock = vi.fn();
 vi.mock('../../shared/prisma', () => ({
-  prisma: { demoUser: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
+  prisma: {
+    demoUser: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
+    recentSearch: {
+      findFirst: (...args: unknown[]) => recentSearchFindFirstMock(...args),
+      create: (...args: unknown[]) => recentSearchCreateMock(...args),
+      update: (...args: unknown[]) => recentSearchUpdateMock(...args),
+    },
+  },
 }));
 
 function mockOffResponse(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
@@ -117,6 +136,13 @@ describe('GET /api/search', () => {
     expect(requestedUrl.origin + requestedUrl.pathname).toBe('https://search.openfoodfacts.org/search');
     expect(requestedUrl.searchParams.get('q')).toBe('nutella');
     expect(requestedUrl.searchParams.get('langs')).toBe('en');
+
+    // Recent Searches' logging middleware (recent-searches.log.ts) records
+    // the search before the response above is actually sent, so this is
+    // already true by now. Full persistence/ordering/cap/dedup coverage
+    // lives in recent-searches.test.ts; this is just a smoke check that the
+    // hook is actually wired up for a real successful search.
+    expect(recentSearchCreateMock).toHaveBeenCalledWith({ data: { demoUserId: 1, query: 'nutella' } });
 
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
     expect(requestInit.headers).toMatchObject({
