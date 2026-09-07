@@ -5,6 +5,17 @@ import { hasLocale, useLocale, useTranslations } from 'next-intl';
 import { routing } from '@/i18n/routing';
 import { usePathname, useRouter } from '@/i18n/navigation';
 
+// Flags are presentational only (not translated content, hence not in
+// messages/*.json) - a plain emoji character renders fine as <option> text
+// across browsers, unlike an <img>/SVG, which native <option> elements
+// don't reliably render at all.
+const LOCALE_FLAGS: Record<string, string> = {
+  en: '🇬🇧',
+  nl: '🇳🇱',
+  de: '🇩🇪',
+  fr: '🇫🇷',
+};
+
 // Manual locale selector per the assignment brief ("support English, Dutch,
 // German, and French through a manual language selector"). Uses next-intl's
 // documented "changing locale for the current page" recipe: combine the
@@ -44,7 +55,7 @@ export function LanguageSwitcher() {
       >
         {routing.locales.map((loc) => (
           <option key={loc} value={loc}>
-            {t(`languageNames.${loc}`)}
+            {LOCALE_FLAGS[loc]} {t(`languageNames.${loc}`)}
           </option>
         ))}
       </select>
