@@ -13,5 +13,31 @@
     "unnamedProduct": "Unnamed product",
     "unknownBrand": "Unknown brand",
     "noImageLabel": "No image"
+  },
+  "subscriptions": {
+    "subscribeButtonLabel": "Subscribe to unlock nutrition info",
+    "startingCheckoutLabel": "Starting checkout…",
+    "checkoutErrorMessage": "Something went wrong while starting checkout. Please try again.",
+    "nutrimentsLockedMessage": "Nutrition info is available to subscribers.",
+    "nutrimentLabels": {
+      "energyKcal": "Energy (kcal)",
+      "fat": "Fat",
+      "saturatedFat": "Saturated fat",
+      "carbohydrates": "Carbohydrates",
+      "sugars": "Sugars",
+      "fiber": "Fiber",
+      "proteins": "Proteins",
+      "salt": "Salt"
+    },
+    "successPage": {
+      "heading": "You're subscribed!",
+      "body": "Your subscription is active. Nutrition info will now appear on search results.",
+      "backToSearchLabel": "Back to search"
+    },
+    "cancelPage": {
+      "heading": "Checkout canceled",
+      "body": "No worries - you can subscribe any time from a product's nutrition section.",
+      "backToSearchLabel": "Back to search"
+    }
   }
 }

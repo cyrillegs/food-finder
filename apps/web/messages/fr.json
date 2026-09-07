@@ -13,5 +13,31 @@
     "unnamedProduct": "Produit sans nom",
     "unknownBrand": "Marque inconnue",
     "noImageLabel": "Aucune image"
+  },
+  "subscriptions": {
+    "subscribeButtonLabel": "S'abonner pour débloquer les infos nutritionnelles",
+    "startingCheckoutLabel": "Démarrage du paiement…",
+    "checkoutErrorMessage": "Une erreur s'est produite lors du démarrage du paiement. Veuillez réessayer.",
+    "nutrimentsLockedMessage": "Les informations nutritionnelles sont réservées aux abonnés.",
+    "nutrimentLabels": {
+      "energyKcal": "Énergie (kcal)",
+      "fat": "Matières grasses",
+      "saturatedFat": "Acides gras saturés",
+      "carbohydrates": "Glucides",
+      "sugars": "Sucres",
+      "fiber": "Fibres",
+      "proteins": "Protéines",
+      "salt": "Sel"
+    },
+    "successPage": {
+      "heading": "Vous êtes abonné !",
+      "body": "Votre abonnement est actif. Les informations nutritionnelles apparaîtront désormais sur les résultats de recherche.",
+      "backToSearchLabel": "Retour à la recherche"
+    },
+    "cancelPage": {
+      "heading": "Paiement annulé",
+      "body": "Pas de souci : vous pouvez vous abonner à tout moment depuis la section nutrition d'un produit.",
+      "backToSearchLabel": "Retour à la recherche"
+    }
   }
 }

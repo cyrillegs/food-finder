@@ -7,9 +7,10 @@ export type SearchStatus = 'idle' | 'loading' | 'error' | 'success';
 type ResultsGridProps = {
   results: SearchProduct[];
   status: SearchStatus;
+  locale: string;
 };
 
-export function ResultsGrid({ results, status }: ResultsGridProps) {
+export function ResultsGrid({ results, status, locale }: ResultsGridProps) {
   const t = useTranslations('search');
 
   if (status === 'idle') {
@@ -38,7 +39,7 @@ export function ResultsGrid({ results, status }: ResultsGridProps) {
       }}
     >
       {results.map((product) => (
-        <ProductCard key={product.code} product={product} />
+        <ProductCard key={product.code} product={product} locale={locale} />
       ))}
     </div>
   );

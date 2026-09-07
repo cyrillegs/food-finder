@@ -36,7 +36,7 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
   return (
     <section>
       <SearchBox onSearch={handleSearch} isLoading={status === 'loading'} />
-      <ResultsGrid results={results} status={status} />
+      <ResultsGrid results={results} status={status} locale={locale} />
     </section>
   );
 }

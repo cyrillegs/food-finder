@@ -1,7 +1,6 @@
 // Thin client for talking to @food-finder/api. Per-module functions get added
 // here as those modules land, e.g.:
 //   export function getRecentSearches() { ... }                // Module 4
-//   export function createCheckoutSession() { ... }            // Module 2
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -13,6 +12,11 @@ export interface SearchProduct {
   name: string | null;
   brand: string | null;
   imageUrl: string | null;
+  // Present only when the demo user's subscription is active - the API
+  // omits this key entirely otherwise (see
+  // apps/api/src/modules/subscriptions/subscriptions.gate.ts). Shape is
+  // intentionally loose, matching the API's own SearchProduct.nutriments.
+  nutriments?: Record<string, unknown>;
 }
 
 export interface SearchResponse {
@@ -58,4 +62,44 @@ export async function search(query: string, locale: string, page = 1): Promise<S
   }
 
   return (await response.json()) as SearchResponse;
+}
+
+export class CheckoutSessionRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'CheckoutSessionRequestError';
+    this.status = status;
+  }
+}
+
+// Creates a Stripe Checkout Session for the demo user and returns its hosted
+// URL. Callers redirect the browser there directly
+// (window.location.href = url) - see components/subscriptions/SubscribeButton.tsx.
+export async function createCheckoutSession(locale: string): Promise<string> {
+  if (!API_BASE_URL) {
+    throw new CheckoutSessionRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
+  }
+
+  const url = new URL('/api/subscriptions/checkout-session', API_BASE_URL);
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ locale }),
+    });
+  } catch {
+    throw new CheckoutSessionRequestError('Could not reach the subscriptions service.');
+  }
+
+  if (!response.ok) {
+    const body: { error?: { message?: string } } | null = await response.json().catch(() => null);
+    throw new CheckoutSessionRequestError(body?.error?.message ?? 'Failed to start checkout.', response.status);
+  }
+
+  const data = (await response.json()) as { url: string };
+  return data.url;
 }
