@@ -19,44 +19,23 @@ export function ProductCard({ product, locale }: ProductCardProps) {
   const brand = product.brand ?? t('unknownBrand');
 
   return (
-    <article
-      style={{
-        border: '1px solid #ddd',
-        borderRadius: 8,
-        padding: '1rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-      }}
-    >
-      <div
-        style={{
-          aspectRatio: '1 / 1',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#f5f5f5',
-          borderRadius: 4,
-          overflow: 'hidden',
-        }}
-      >
+    <article className="flex flex-col gap-3">
+      <div className="flex aspect-square items-center justify-center overflow-hidden bg-ink/4">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- remote OFF
           // images aren't configured in next.config.ts; a plain <img> avoids
           // needing to touch Module 0's build config for this module.
-          <img
-            src={product.imageUrl}
-            alt={name}
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-          />
+          <img src={product.imageUrl} alt={name} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span aria-hidden="true" style={{ color: '#999', fontSize: '0.85rem' }}>
+          <span aria-hidden="true" className="text-sm text-muted">
             {t('noImageLabel')}
           </span>
         )}
       </div>
-      <strong>{name}</strong>
-      <span style={{ color: '#555', fontSize: '0.9rem' }}>{brand}</span>
+      <div className="flex flex-col gap-0.5">
+        <strong className="font-sans text-lg font-medium text-ink">{name}</strong>
+        <span className="text-sm text-muted">{brand}</span>
+      </div>
       <NutrimentsPanel product={product} locale={locale} />
     </article>
   );

@@ -32,7 +32,7 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+    <label className="inline-flex items-center gap-2 text-sm text-muted">
       <span>{t('label')}</span>
       <select
         value={locale}
@@ -40,7 +40,7 @@ export function LanguageSwitcher() {
         disabled={isPending}
         aria-label={t('label')}
         data-testid="language-switcher"
-        style={{ padding: '0.25rem 0.5rem', fontSize: '1rem' }}
+        className="border border-ink/20 bg-paper px-2 py-1 text-sm text-ink focus:border-ink focus:outline-none disabled:opacity-60"
       >
         {routing.locales.map((loc) => (
           <option key={loc} value={loc}>
