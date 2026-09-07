@@ -1,4 +1,14 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+// The switcher is a custom listbox (see components/i18n/LanguageSwitcher.tsx
+// - a native <select>'s <option> can't render the flag icons), so this
+// suite drives it like a real user would (open, click an option) rather
+// than Playwright's `selectOption()`/`toHaveValue()`, which only work on an
+// actual <select> element.
+async function selectLocale(page: Page, targetLocale: string) {
+  await page.getByTestId('language-switcher').click();
+  await page.locator(`[role="option"][data-locale="${targetLocale}"]`).click();
+}
 
 // Real-browser coverage for Module 4 (i18n): the manual LanguageSwitcher and
 // per-locale rendering, run against a real dev server doing a real search
@@ -47,11 +57,14 @@ for (const { code, searchHeading, submitLabel } of LOCALES) {
     // languages offered regardless of which one is active.
     const switcher = page.getByTestId('language-switcher');
     await expect(switcher).toBeVisible();
-    await expect(switcher).toHaveValue(code);
-    const optionValues = await switcher
-      .locator('option')
-      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value).sort());
-    expect(optionValues).toEqual(['de', 'en', 'fr', 'nl']);
+    await expect(switcher).toHaveAttribute('data-current-locale', code);
+
+    await switcher.click();
+    const optionLocales = await page
+      .locator('[role="option"]')
+      .evaluateAll((options) => options.map((option) => option.getAttribute('data-locale')).sort());
+    expect(optionLocales).toEqual(['de', 'en', 'fr', 'nl']);
+    await page.keyboard.press('Escape');
 
     // A real search against the live Search-a-licious-backed API returns
     // results - not asserting on translated product data (OFF product names
@@ -68,13 +81,13 @@ test('switching locale from a non-home page preserves the current page', async (
   await page.goto('/en/subscribe/success');
   await expect(page.getByRole('heading', { name: "You're subscribed!" })).toBeVisible();
 
-  await page.getByTestId('language-switcher').selectOption('fr');
+  await selectLocale(page, 'fr');
   await page.waitForURL(/\/fr\/subscribe\/success$/);
   await expect(page.getByRole('heading', { name: 'Vous êtes abonné !' })).toBeVisible();
 
   // And the reverse direction, from a locale other than the default back to
   // English, also lands on the equivalent page rather than bouncing home.
-  await page.getByTestId('language-switcher').selectOption('en');
+  await selectLocale(page, 'en');
   await page.waitForURL(/\/en\/subscribe\/success$/);
   await expect(page.getByRole('heading', { name: "You're subscribed!" })).toBeVisible();
 });
@@ -83,8 +96,8 @@ test('cycles through all four locales from the home page without getting stuck',
   await page.goto('/en');
 
   for (const target of ['nl', 'de', 'fr', 'en'] as const) {
-    await page.getByTestId('language-switcher').selectOption(target);
+    await selectLocale(page, target);
     await page.waitForURL(new RegExp(`/${target}$`));
-    await expect(page.getByTestId('language-switcher')).toHaveValue(target);
+    await expect(page.getByTestId('language-switcher')).toHaveAttribute('data-current-locale', target);
   }
 });

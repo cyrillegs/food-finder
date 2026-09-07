@@ -41,7 +41,7 @@
   },
   "subscriptions": {
     "subscribeButtonLabel": "Subscribe to unlock nutrition info",
-    "subscribeLoginPromptLabel": "Log in to subscribe",
+    "subscribeLoginPromptLabel": "Log in to unlock nutrition info",
     "startingCheckoutLabel": "Starting checkout…",
     "checkoutErrorMessage": "Something went wrong while starting checkout. Please try again.",
     "nutrimentsLockedMessage": "Nutrition info is available to subscribers.",

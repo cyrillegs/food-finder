@@ -57,7 +57,7 @@ test('logged out: Subscribe and Recent Searches both prompt login instead of the
   const searchbox = page.getByRole('searchbox', { name: SEARCH_HEADING });
   await searchbox.fill('nutella');
   await page.getByRole('button', { name: SEARCH_SUBMIT, exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Log in to subscribe' }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('link', { name: 'Log in to unlock nutrition info' }).first()).toBeVisible({ timeout: 15_000 });
 });
 
 test('logging in with valid credentials switches the header to the logged-in state', async ({ page }) => {

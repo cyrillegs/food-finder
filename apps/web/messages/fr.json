@@ -41,7 +41,7 @@
   },
   "subscriptions": {
     "subscribeButtonLabel": "S'abonner pour débloquer les infos nutritionnelles",
-    "subscribeLoginPromptLabel": "Se connecter pour s'abonner",
+    "subscribeLoginPromptLabel": "Se connecter pour débloquer les infos nutritionnelles",
     "startingCheckoutLabel": "Démarrage du paiement…",
     "checkoutErrorMessage": "Une erreur s'est produite lors du démarrage du paiement. Veuillez réessayer.",
     "nutrimentsLockedMessage": "Les informations nutritionnelles sont réservées aux abonnés.",
