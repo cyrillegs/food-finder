@@ -98,6 +98,13 @@ test('logging out returns to the logged-out state', async ({ page }) => {
 
 // The actual point of this whole module: two different accounts must never
 // share Recent Searches history.
+//
+// `exact: true` on the entry lookups below matters: each entry's delete
+// button carries an aria-label like `Remove "<query>" from recent
+// searches`, which substring-matches `{ name: demo1Query }` under
+// Playwright's default non-exact matching once that query text appears
+// inside the delete button's own label too - resolving to two elements
+// instead of one.
 test('two different logged-in users see separate Recent Searches histories', async ({ page }) => {
   const demo1Query = nonce('demo1-only');
 
@@ -106,13 +113,13 @@ test('two different logged-in users see separate Recent Searches histories', asy
   await searchbox.fill(demo1Query);
   await page.getByRole('button', { name: SEARCH_SUBMIT, exact: true }).click();
   await expect(
-    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query }),
+    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query, exact: true }),
   ).toBeVisible({ timeout: 15_000 });
 
   await logout(page);
   await login(page, DEMO2);
 
   await expect(
-    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query }),
+    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query, exact: true }),
   ).toHaveCount(0);
 });
