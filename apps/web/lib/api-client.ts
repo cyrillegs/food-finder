@@ -166,6 +166,29 @@ export async function getRecentSearches(): Promise<RecentSearchEntry[]> {
   return data.results;
 }
 
+// Deletes one recent-search entry, scoped server-side to the logged-in
+// user (see recent-searches.route.ts) - this never needs to pass a user id
+// itself, the session cookie is what authorizes it.
+export async function deleteRecentSearch(id: number): Promise<void> {
+  if (!API_BASE_URL) {
+    throw new RecentSearchesRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
+  }
+
+  const url = new URL(`/api/searches/recent/${id}`, API_BASE_URL);
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  } catch {
+    throw new RecentSearchesRequestError('Could not reach the recent searches service.');
+  }
+
+  if (!response.ok) {
+    const body: { error?: { message?: string } } | null = await response.json().catch(() => null);
+    throw new RecentSearchesRequestError(body?.error?.message ?? 'Failed to delete recent search.', response.status);
+  }
+}
+
 // Mirrors apps/api/src/modules/auth/auth.service.ts's PublicUser - never
 // includes passwordHash or Stripe ids, only what the frontend needs to
 // reflect auth state and gate the Subscribe UI.

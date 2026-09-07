@@ -26,7 +26,8 @@
   "recentSearches": {
     "heading": "Recherches récentes",
     "emptyMessage": "Aucune recherche récente pour l'instant.",
-    "loginPromptMessage": "Connectez-vous pour voir votre historique de recherche."
+    "loginPromptMessage": "Connectez-vous pour voir votre historique de recherche.",
+    "removeLabel": "Supprimer « {query} » des recherches récentes"
   },
   "auth": {
     "heading": "Connexion",

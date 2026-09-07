@@ -26,7 +26,8 @@
   "recentSearches": {
     "heading": "Letzte Suchanfragen",
     "emptyMessage": "Du hast noch nicht gesucht.",
-    "loginPromptMessage": "Melde dich an, um deine Suchhistorie zu sehen."
+    "loginPromptMessage": "Melde dich an, um deine Suchhistorie zu sehen.",
+    "removeLabel": "\"{query}\" aus den letzten Suchanfragen entfernen"
   },
   "auth": {
     "heading": "Anmelden",

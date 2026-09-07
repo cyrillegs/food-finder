@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
-import { recordSearch, getRecentSearches } from './recent-searches.service';
+import { recordSearch, getRecentSearches, deleteRecentSearch } from './recent-searches.service';
 
 // vi.mock calls are hoisted above the imports above by Vitest, so
 // shared/app.ts (and, transitively, shared/prisma.ts) never sees the real
@@ -26,6 +26,7 @@ const recentSearchMocks = {
   findMany: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  deleteMany: vi.fn(),
 };
 
 vi.mock('../../shared/prisma', () => ({
@@ -37,6 +38,7 @@ vi.mock('../../shared/prisma', () => ({
       findMany: (...args: unknown[]) => recentSearchMocks.findMany(...args),
       create: (...args: unknown[]) => recentSearchMocks.create(...args),
       update: (...args: unknown[]) => recentSearchMocks.update(...args),
+      deleteMany: (...args: unknown[]) => recentSearchMocks.deleteMany(...args),
     },
   },
 }));
@@ -166,6 +168,37 @@ describe('recent-searches.service', () => {
       expect(result).toBe(rows);
     });
   });
+
+  describe('deleteRecentSearch', () => {
+    it('scopes the delete to both the search id and the given user id', async () => {
+      recentSearchMocks.deleteMany.mockResolvedValue({ count: 1 });
+
+      await deleteRecentSearch(1, 7);
+
+      expect(recentSearchMocks.deleteMany).toHaveBeenCalledWith({
+        where: { id: 7, userId: 1 },
+      });
+    });
+
+    it('returns true when a row was actually deleted', async () => {
+      recentSearchMocks.deleteMany.mockResolvedValue({ count: 1 });
+
+      const result = await deleteRecentSearch(1, 7);
+
+      expect(result).toBe(true);
+    });
+
+    // Covers both "no such id at all" and "id belongs to another user" -
+    // deleteMany's count is 0 either way, which is exactly what should map
+    // to "not deleted" without distinguishing the two cases.
+    it("returns false when nothing matched (unknown id, or someone else's id)", async () => {
+      recentSearchMocks.deleteMany.mockResolvedValue({ count: 0 });
+
+      const result = await deleteRecentSearch(1, 999);
+
+      expect(result).toBe(false);
+    });
+  });
 });
 
 describe('GET /api/searches/recent', () => {
@@ -223,6 +256,57 @@ describe('GET /api/searches/recent', () => {
     expect(res.status).toBe(200);
     expect(recentSearchMocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 2 } }));
     expect(res.body.results).toEqual([{ id: 9, query: 'oat milk', createdAt: '2026-01-05T00:00:00.000Z' }]);
+  });
+});
+
+describe('DELETE /api/searches/recent/:id', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('requires a logged-in user - 401 with no session cookie', async () => {
+    const res = await request(app).delete('/api/searches/recent/7');
+
+    expect(res.status).toBe(401);
+    expect(recentSearchMocks.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes the entry and responds 204 when it belongs to the logged-in user', async () => {
+    mockLoggedInAs(1);
+    recentSearchMocks.deleteMany.mockResolvedValue({ count: 1 });
+
+    const res = await request(app).delete('/api/searches/recent/7').set('Cookie', SESSION_COOKIE);
+
+    expect(res.status).toBe(204);
+    expect(recentSearchMocks.deleteMany).toHaveBeenCalledWith({ where: { id: 7, userId: 1 } });
+  });
+
+  it("responds 404 for an id that belongs to a different user, without revealing that it exists", async () => {
+    mockLoggedInAs(1);
+    recentSearchMocks.deleteMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app).delete('/api/searches/recent/7').set('Cookie', SESSION_COOKIE);
+
+    expect(res.status).toBe(404);
+    expect(recentSearchMocks.deleteMany).toHaveBeenCalledWith({ where: { id: 7, userId: 1 } });
+  });
+
+  it('responds 404 for an id that does not exist at all', async () => {
+    mockLoggedInAs(1);
+    recentSearchMocks.deleteMany.mockResolvedValue({ count: 0 });
+
+    const res = await request(app).delete('/api/searches/recent/999999').set('Cookie', SESSION_COOKIE);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('responds 400 for a non-numeric id', async () => {
+    mockLoggedInAs(1);
+
+    const res = await request(app).delete('/api/searches/recent/not-a-number').set('Cookie', SESSION_COOKIE);
+
+    expect(res.status).toBe(400);
+    expect(recentSearchMocks.deleteMany).not.toHaveBeenCalled();
   });
 });
 

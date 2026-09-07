@@ -4,6 +4,12 @@ import type { RecentSearchEntry } from '@/lib/api-client';
 type RecentSearchesPanelProps = {
   searches: RecentSearchEntry[];
   onSelect: (query: string) => void;
+  // Removes one entry from the user's own history - see
+  // recent-searches.service.ts's deleteRecentSearch for the ownership
+  // scoping. Kept as a separate sibling button rather than nested inside
+  // the onSelect button (buttons can't nest in valid HTML), so no
+  // stopPropagation dance is needed either.
+  onDelete: (id: number) => void;
   // Whether a user is currently logged in - GET /api/searches/recent now
   // requires one (see recent-searches.route.ts), so there's no shared
   // anonymous history to show anymore. SearchExperience doesn't even fetch
@@ -31,7 +37,7 @@ type RecentSearchesPanelProps = {
 // something scoped to "this visit" - hiding it until it has content would
 // misrepresent it as newer than it is. The empty state below keeps that
 // always-visible choice honest rather than confusing.
-export function RecentSearchesPanel({ searches, onSelect, isLoggedIn, isHero = false }: RecentSearchesPanelProps) {
+export function RecentSearchesPanel({ searches, onSelect, onDelete, isLoggedIn, isHero = false }: RecentSearchesPanelProps) {
   const t = useTranslations('recentSearches');
 
   return (
@@ -44,13 +50,21 @@ export function RecentSearchesPanel({ searches, onSelect, isLoggedIn, isHero = f
       ) : (
         <ul className="flex flex-wrap gap-2">
           {searches.map((entry) => (
-            <li key={entry.id}>
+            <li key={entry.id} className="flex items-stretch border border-ink/20 transition-colors hover:border-ink">
               <button
                 type="button"
                 onClick={() => onSelect(entry.query)}
-                className="border border-ink/20 px-3 py-1.5 text-sm text-ink transition-colors hover:border-ink hover:bg-ink/5"
+                className="px-3 py-1.5 text-sm text-ink transition-colors hover:bg-ink/5"
               >
                 {entry.query}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(entry.id)}
+                aria-label={t('removeLabel', { query: entry.query })}
+                className="border-l border-ink/20 px-2 py-1.5 text-sm text-muted transition-colors hover:bg-ink/5 hover:text-ink"
+              >
+                ×
               </button>
             </li>
           ))}

@@ -43,6 +43,16 @@ export async function createCheckoutSession(webOrigin: string, locale: string, u
     // Reuse the existing Stripe customer if we've already learned one via a
     // prior webhook; otherwise leave this unset and let Stripe create one.
     customer: user.stripeCustomerId ?? undefined,
+    // `customer` and `customer_email` are mutually exclusive - Stripe
+    // rejects a Checkout Session that sets both (confirmed against Stripe's
+    // own current API docs). A returning subscriber's existing customer
+    // record already carries their email (Stripe pre-fills it from there
+    // automatically); a first-time subscriber has no customer yet, so this
+    // is the only way to get their real email onto the Checkout page and
+    // the brand-new Customer Stripe creates for them, instead of leaving
+    // both blank and making them retype an email they already gave us at
+    // login.
+    customer_email: user.stripeCustomerId ? undefined : user.email,
     // Attributes this Checkout Session back to the initiating User, so
     // handleCheckoutSessionCompleted below can persist the resulting
     // customer/subscription ids onto the right row. This matters

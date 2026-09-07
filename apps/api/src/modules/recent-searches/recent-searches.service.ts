@@ -65,3 +65,21 @@ export async function getRecentSearches(userId: number): Promise<RecentSearch[]>
     take: MAX_RECENT_SEARCHES,
   });
 }
+
+// Deletes one recent-search entry, scoped to the given user - the `userId`
+// is part of the WHERE clause itself (not checked separately after an
+// unscoped lookup), so this can never delete a row belonging to a different
+// user no matter what id is passed in. `deleteMany` rather than `delete`
+// specifically because `delete` requires its `where` to be a unique
+// identifier on its own (just `id`) - a compound id+userId condition needs
+// the `deleteMany` shape instead. Returns whether a row actually matched,
+// so the route can tell "deleted" apart from "no such entry for this user"
+// (which covers both a genuinely unknown id and someone else's id) without
+// leaking which case it was - both look identical to the caller, which is
+// the correct behavior for someone probing ids that aren't theirs.
+export async function deleteRecentSearch(userId: number, searchId: number): Promise<boolean> {
+  const result = await prisma.recentSearch.deleteMany({
+    where: { id: searchId, userId },
+  });
+  return result.count > 0;
+}
