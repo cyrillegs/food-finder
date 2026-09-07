@@ -2,6 +2,15 @@
   "common": {
     "title": "Food Finder"
   },
+  "languageSwitcher": {
+    "label": "Sprache",
+    "languageNames": {
+      "en": "English",
+      "nl": "Nederlands",
+      "de": "Deutsch",
+      "fr": "Français"
+    }
+  },
   "search": {
     "heading": "Lebensmittel suchen",
     "placeholder": "Nach Produktname oder Marke suchen",
