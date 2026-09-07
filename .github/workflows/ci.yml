@@ -90,6 +90,29 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+  # Actually builds both production Dockerfiles, on every PR - not just the
+  # source-level api/web checks above, which never touch the Dockerfiles at
+  # all. Without this, a broken Dockerfile only surfaces post-merge, when
+  # the deploy job below tries to build it on Dokploy - matches Delta's own
+  # `images` job for the same reason (build context is the repo root, see
+  # the comment at the top of each Dockerfile). No ZAP scan here (Delta's
+  # was tied to a specific compliance commitment that doesn't apply here) -
+  # just confirms both images actually build.
+  images:
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build api image
+        run: docker build -f apps/api/Dockerfile -t food-finder-api:ci .
+
+      - name: Build web image
+        run: |
+          docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_BASE_URL=https://food-finder-api.cdlegaspi.site \
+            -t food-finder-web:ci .
+
   # Deploys web/api on Dokploy after both gates above pass. main only, so PR
   # builds never deploy. There is no staging here (unlike Delta) - one
   # environment, so this goes straight to the only Dokploy project that
@@ -104,7 +127,7 @@ jobs:
   deploy:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    needs: [api, web]
+    needs: [api, web, images]
     env:
       DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
       DOKPLOY_KEY: ${{ secrets.DOKPLOY_API_KEY }}
