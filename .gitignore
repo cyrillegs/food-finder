@@ -27,8 +27,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# private planning material - not for the portfolio/public copy of this repo
-food-finder-plan.md
-docs/backlog.md
-docs/assignment*.pdf
+# private planning material - not for the portfolio/public copy of this repo,
+# and not part of the take-home submission. Whole folder, so nothing new
+# added here later needs a matching gitignore entry - if something in docs/
+# genuinely needs to ship (has happened before: test-accounts.md), it needs
+# an explicit `git add -f`, which is a deliberate, visible choice rather
+# than an accident.
+docs/
 _move_log.txt
