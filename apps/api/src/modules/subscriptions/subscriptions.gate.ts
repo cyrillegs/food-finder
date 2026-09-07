@@ -15,16 +15,30 @@ function omitNutriments(product: SearchProduct): SearchProduct {
   return rest;
 }
 
+// Search's own response shape carries no notion of subscriptions - this is
+// the superset the gate actually sends. The frontend needs `subscriptionActive`
+// as an explicit flag, not just inferred from whether any given product
+// happens to have `nutriments`: plenty of real Open Food Facts products have
+// no nutrition data submitted at all regardless of subscription state (the
+// same reason some have no image), and conflating "you're not subscribed"
+// with "this product has no data" produced a real bug - a subscribed user
+// still saw a "Subscribe to unlock" button on those products, which does
+// nothing useful since there's nothing to unlock.
+export interface GatedSearchResponseBody extends SearchResponseBody {
+  subscriptionActive: boolean;
+}
+
 // Pure and exported separately from the middleware below so it's directly
 // unit-testable without spinning up a request.
-export function applyNutrimentsGate(body: SearchResponseBody, unlocked: boolean): SearchResponseBody {
-  if (unlocked || !Array.isArray(body.results)) {
-    return body;
+export function applyNutrimentsGate(body: SearchResponseBody, unlocked: boolean): GatedSearchResponseBody {
+  if (!Array.isArray(body.results)) {
+    return { ...body, subscriptionActive: unlocked };
   }
 
   return {
     ...body,
-    results: body.results.map(omitNutriments),
+    subscriptionActive: unlocked,
+    results: unlocked ? body.results : body.results.map(omitNutriments),
   };
 }
 

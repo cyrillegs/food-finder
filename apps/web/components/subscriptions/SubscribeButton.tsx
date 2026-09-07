@@ -33,11 +33,25 @@ export function SubscribeButton({ locale }: SubscribeButtonProps) {
 
   return (
     <div>
-      <button type="button" onClick={handleClick} disabled={isLoading} style={{ padding: '0.4rem 0.9rem' }}>
+      {/* The subscribe CTA: one of the very few places `accent` appears in
+          the whole app, reserved for active/unlocked states per the design
+          system - deliberately not reused for hover states or chrome
+          elsewhere. An outline treatment rather than a solid fill: every
+          unsubscribed search result renders one of these, so a solid block
+          repeated down the whole grid would make the "one scarce color"
+          rule meaningless in practice. The outline keeps accent as the only
+          color used here while staying quiet at that repetition; the fill
+          reserved for the hover/press moment. */}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isLoading}
+        className="border border-accent px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent hover:text-paper disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-accent"
+      >
         {isLoading ? t('startingCheckoutLabel') : t('subscribeButtonLabel')}
       </button>
       {hasError && (
-        <p role="alert" style={{ color: '#b00020', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+        <p role="alert" className="mt-2 text-sm text-red-700">
           {t('checkoutErrorMessage')}
         </p>
       )}

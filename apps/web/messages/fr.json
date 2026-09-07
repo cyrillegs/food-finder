@@ -28,6 +28,7 @@
     "startingCheckoutLabel": "Démarrage du paiement…",
     "checkoutErrorMessage": "Une erreur s'est produite lors du démarrage du paiement. Veuillez réessayer.",
     "nutrimentsLockedMessage": "Les informations nutritionnelles sont réservées aux abonnés.",
+    "nutrimentsUnavailableMessage": "Les informations nutritionnelles ne sont pas disponibles pour ce produit.",
     "nutrimentLabels": {
       "energyKcal": "Énergie (kcal)",
       "fat": "Matières grasses",

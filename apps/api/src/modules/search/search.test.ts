@@ -100,6 +100,7 @@ describe('GET /api/search', () => {
       totalPages: 1,
     });
     expect(res.body.results[0]).not.toHaveProperty('nutriments');
+    expect(res.body.subscriptionActive).toBe(false);
     expect(res.body.results).toEqual([
       {
         code: '3017620422003',

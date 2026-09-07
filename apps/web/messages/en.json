@@ -28,6 +28,7 @@
     "startingCheckoutLabel": "Starting checkout…",
     "checkoutErrorMessage": "Something went wrong while starting checkout. Please try again.",
     "nutrimentsLockedMessage": "Nutrition info is available to subscribers.",
+    "nutrimentsUnavailableMessage": "Nutrition info isn't available for this product.",
     "nutrimentLabels": {
       "energyKcal": "Energy (kcal)",
       "fat": "Fat",

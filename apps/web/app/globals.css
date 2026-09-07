@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+/*
+ * Food Finder design tokens.
+ *
+ * Grounded in the subject matter (nutrition labels), not a generic SaaS
+ * palette: `accent` is a single, deliberately scarce forest green reserved
+ * for active/unlocked states (the subscribe CTA, the subscribed indicator on
+ * the success page) - everything else in the app's chrome stays quiet,
+ * relying on `ink`/`muted`/`paper` only. See NutrimentsPanel/SubscribeButton
+ * for the one place the design is allowed to be "loud" (the nutrition-facts
+ * motif) and components/search + the header for the calmer system.
+ */
+@theme {
+  --color-paper: #f6f7f5;
+  --color-ink: #17181a;
+  --color-accent: #1f6f4a;
+  --color-muted: #8a8578;
+  --color-redacted: #e4e2dc;
+
+  /*
+   * Type scale: a classic 1.25 (major third) ratio off a 1rem base, rather
+   * than Tailwind's default text-sm/base/lg/xl with no system behind them.
+   * Overriding the standard scale keys (not inventing new ones) so ordinary
+   * text-sm/base/lg/... utilities follow this scale everywhere.
+   */
+  --text-xs: 0.64rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5625rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.953rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2.441rem;
+  --text-3xl--line-height: 2.75rem;
+  --text-4xl: 3.052rem;
+  --text-4xl--line-height: 3.25rem;
+  --text-5xl: 3.815rem;
+  --text-5xl--line-height: 4rem;
+}
+
+/*
+ * Wire next/font's generated CSS variables (set on <html> in
+ * app/[locale]/layout.tsx) into Tailwind's font-family theme. `inline` so
+ * the utilities resolve straight to the next/font variable rather than
+ * indirecting through another custom property.
+ *   - font-display (Fraunces)   -> wordmark, page headings.
+ *   - font-sans (Space Grotesk) -> everything else (the default).
+ *   - font-mono (IBM Plex Mono) -> nutrition numerals only.
+ */
+@theme inline {
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-ibm-plex-mono);
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
