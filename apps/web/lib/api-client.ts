@@ -1,6 +1,5 @@
 // Thin client for talking to @food-finder/api. Per-module functions get added
-// here as those modules land, e.g.:
-//   export function getRecentSearches() { ... }                // Module 4
+// here as those modules land.
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -109,4 +108,48 @@ export async function createCheckoutSession(locale: string): Promise<string> {
 
   const data = (await response.json()) as { url: string };
   return data.url;
+}
+
+// Mirrors apps/api/src/modules/recent-searches/recent-searches.route.ts's
+// response shape.
+export interface RecentSearchEntry {
+  id: number;
+  query: string;
+  createdAt: string;
+}
+
+export class RecentSearchesRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'RecentSearchesRequestError';
+    this.status = status;
+  }
+}
+
+// Fetches the demo user's most recent searches, newest first, already
+// capped at 10 by the API (see recent-searches.service.ts) - nothing further
+// to cap or sort here.
+export async function getRecentSearches(): Promise<RecentSearchEntry[]> {
+  if (!API_BASE_URL) {
+    throw new RecentSearchesRequestError('NEXT_PUBLIC_API_BASE_URL is not configured.');
+  }
+
+  const url = new URL('/api/searches/recent', API_BASE_URL);
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new RecentSearchesRequestError('Could not reach the recent searches service.');
+  }
+
+  if (!response.ok) {
+    const body: { error?: { message?: string } } | null = await response.json().catch(() => null);
+    throw new RecentSearchesRequestError(body?.error?.message ?? 'Failed to load recent searches.', response.status);
+  }
+
+  const data = (await response.json()) as { results: RecentSearchEntry[] };
+  return data.results;
 }

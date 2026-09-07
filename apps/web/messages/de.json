@@ -23,6 +23,10 @@
     "unknownBrand": "Unbekannte Marke",
     "noImageLabel": "Kein Bild"
   },
+  "recentSearches": {
+    "heading": "Letzte Suchanfragen",
+    "emptyMessage": "Du hast noch nicht gesucht."
+  },
   "subscriptions": {
     "subscribeButtonLabel": "Abonnieren, um Nährwertangaben freizuschalten",
     "startingCheckoutLabel": "Bezahlvorgang wird gestartet…",
