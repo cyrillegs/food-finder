@@ -16,7 +16,7 @@ import { test, expect } from '@playwright/test';
 // locale-switching.spec.ts: doing so would mean standing up MySQL and both
 // dev servers inside that workflow, out of scope for this module).
 //
-// Unlike Subscriptions' DemoUser row, which prior modules were careful to
+// Unlike a Subscriptions User row, which prior modules were careful to
 // reset between runs, RecentSearch rows are meant to accumulate - so every
 // assertion here uses a per-run unique query string (a nonce token) rather
 // than assuming the panel starts empty or asserting on its exact contents.
@@ -31,15 +31,33 @@ import { test, expect } from '@playwright/test';
 // have to search through.
 //
 // Run manually the same way apps/web's other e2e suite is: `docker compose
-// up -d`, `npm run dev` in apps/api, `npm run dev` in apps/web, then from
-// apps/web: `npm run test:e2e -- e2e/recent-searches.spec.ts`.
+// up -d`, `npm run dev` in apps/api, `npm run dev` in apps/web, `npx prisma
+// db seed` in apps/api (if not already seeded), then from apps/web: `npm
+// run test:e2e -- e2e/recent-searches.spec.ts`.
+//
+// GET /api/searches/recent now requires a logged-in user (see the
+// login/multi-user module's PR description) - every test here logs in
+// first via `demo3@food-finder.local` (apps/api/prisma/seed.ts), a
+// different seeded account than e2e/login.spec.ts uses, so this suite's
+// accumulated history doesn't interact with that one's assertions.
+// Anonymous-visitor coverage (locked out of this panel entirely) lives in
+// login.spec.ts, not duplicated here.
 
 const HEADING = 'Find a food product';
 const SUBMIT = 'Search';
 const PANEL_LABEL = 'Recent searches';
+const DEMO_ACCOUNT = { email: 'demo3@food-finder.local', password: 'FoodFinderDemo!2026' };
 
 function nonce(label: string): string {
   return `e2e-${label}-${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
+}
+
+async function login(page: import('@playwright/test').Page) {
+  await page.goto('/en/login');
+  await page.getByLabel('Email').fill(DEMO_ACCOUNT.email);
+  await page.getByLabel('Password').fill(DEMO_ACCOUNT.password);
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
+  await page.waitForURL(/\/en$/);
 }
 
 async function runSearch(page: import('@playwright/test').Page, query: string) {
@@ -50,10 +68,13 @@ async function runSearch(page: import('@playwright/test').Page, query: string) {
   await expect(page.getByRole('button', { name: query })).toBeVisible({ timeout: 15_000 });
 }
 
+test.beforeEach(async ({ page }) => {
+  await login(page);
+});
+
 test('a completed search appears in the Recent Searches panel', async ({ page }) => {
   const query = nonce('appears');
 
-  await page.goto('/en');
   await runSearch(page, query);
 });
 

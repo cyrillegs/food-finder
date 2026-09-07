@@ -1,13 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // End-to-end proof that the whole Subscriptions module actually works
-// against a real deployment: search -> locked nutriments -> real Stripe
-// test-mode Checkout -> webhook fires -> nutriments unlock. Run against
-// any environment via BASE_URL (see playwright.config.ts); defaults to
-// local dev. Requires STRIPE_SECRET_KEY in the environment so the
+// against a real deployment: log in -> search -> locked nutriments -> real
+// Stripe test-mode Checkout -> webhook fires -> nutriments unlock. Run
+// against any environment via BASE_URL (see playwright.config.ts); defaults
+// to local dev. Requires STRIPE_SECRET_KEY in the environment so the
 // afterAll hook can cancel the subscription it creates - this test must
 // never leave the target environment's demo user in a subscribed state,
 // the same discipline Module 3's own local verification followed.
+//
+// Checkout now requires a logged-in user (see the login/multi-user
+// module's PR description) - this suite logs in as
+// demo5@food-finder.local (apps/api/prisma/seed.ts) first, a seeded
+// account not used by e2e/login.spec.ts or e2e/recent-searches.spec.ts, so
+// this one real subscribe attempt never collides with those suites'
+// assumptions about their own accounts' state.
 //
 // Not part of `npm test` / CI - this hits real Stripe test-mode Checkout
 // and a real deployment, not something to run on every push. Invoke
@@ -18,7 +25,17 @@ if (!STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY must be set to run this suite (needed for cleanup).');
 }
 
+const DEMO_ACCOUNT = { email: 'demo5@food-finder.local', password: 'FoodFinderDemo!2026' };
+
 let createdSubscriptionId: string | undefined;
+
+async function login(page: Page) {
+  await page.goto('/en/login');
+  await page.getByLabel('Email').fill(DEMO_ACCOUNT.email);
+  await page.getByLabel('Password').fill(DEMO_ACCOUNT.password);
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
+  await page.waitForURL(/\/en$/);
+}
 
 async function search(page: Page, query: string) {
   await page.getByRole('searchbox', { name: 'Find a food product' }).fill(query);
@@ -29,9 +46,10 @@ async function search(page: Page, query: string) {
 }
 
 test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async ({ page }) => {
-  await page.goto('/en');
+  await login(page);
 
-  // Nutriments locked before subscribing.
+  // Nutriments locked before subscribing (logged in, but not yet
+  // subscribed).
   await search(page, 'nutella');
   await expect(page.getByRole('button', { name: 'Subscribe to unlock nutrition info' }).first()).toBeVisible();
 
@@ -58,14 +76,14 @@ test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async 
 
   await page.getByRole('button', { name: 'Subscribe' }).click();
 
-  // Webhook needs a moment to fire and update DemoUser after redirect.
+  // Webhook needs a moment to fire and update the User row after redirect.
   await page.waitForURL((url) => url.pathname.includes('/subscribe/success'), { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: "You're subscribed!" })).toBeVisible();
 
   // Confirm gating actually flipped server-side - the whole point of this
   // test. A fresh search should now show real nutrition values instead of
-  // the locked message, since the API re-checks DemoUser.subscriptionStatus
-  // on every request rather than relying on any client-side state.
+  // the locked message, since the API re-checks User.subscriptionStatus on
+  // every request rather than relying on any client-side state.
   await page.goto('/en');
   await page.waitForTimeout(3_000); // small buffer for the webhook to have landed
   await page.getByRole('searchbox', { name: 'Find a food product' }).fill('nutella');
