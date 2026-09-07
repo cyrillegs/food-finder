@@ -42,7 +42,15 @@ test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async 
   // Verified empirically: Stripe's hosted Checkout page (unlike embedded
   // Elements on a third-party site) renders these as plain page elements,
   // not iframe-isolated - no frameLocator needed.
-  await page.getByPlaceholder('email@example.com').fill('e2e-test@food-finder.local');
+  //
+  // The email field is conditional: Stripe's Link feature recognizes a
+  // *reused* test email (this suite always uses the same one) and shows it
+  // as pre-filled static text instead of an editable input - confirmed live
+  // after a few repeated runs. Only fill it if it's actually there to fill.
+  const emailField = page.getByPlaceholder('email@example.com');
+  if (await emailField.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await emailField.fill('e2e-test@food-finder.local');
+  }
   await page.getByPlaceholder('1234 1234 1234 1234').fill('4242424242424242');
   await page.getByPlaceholder('MM / YY').fill('12/34');
   await page.getByPlaceholder('CVC').fill('123');
@@ -62,30 +70,46 @@ test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async 
   await page.waitForTimeout(3_000); // small buffer for the webhook to have landed
   await page.getByRole('searchbox', { name: 'Find a food product' }).fill('nutella');
   await page.getByRole('button', { name: 'Search' }).click();
-  await expect(page.getByText('Energy (kcal)').first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Nutrition info is available to subscribers.').first()).not.toBeVisible();
+  // Scoped to the first card specifically, not "nowhere on the page" - some
+  // Open Food Facts products genuinely have no nutriment data at all
+  // (same reason some have no image), so they show the same "subscribe to
+  // unlock" message regardless of subscription status. That's a data gap,
+  // not a gating bug - confirmed live: this exact assertion unscoped failed
+  // even with a real, active subscription, while nutella (the query used
+  // here) is confirmed to have real nutriment data in OFF.
+  const firstCard = page.getByRole('article').first();
+  await expect(firstCard.getByText('Energy (kcal)')).toBeVisible({ timeout: 15_000 });
+  await expect(firstCard.getByText('Nutrition info is available to subscribers.')).not.toBeVisible();
 });
 
 test.afterAll(async () => {
-  // Reset state: find the demo customer's active test subscription and cancel
-  // it, so this suite never leaves a shared/demo environment in a subscribed
-  // state. Looked up by email rather than a captured ID, since the test above
-  // doesn't currently plumb the subscription ID back out of the page.
-  const res = await fetch('https://api.stripe.com/v1/customers/search?query=' + encodeURIComponent('email:"e2e-test@food-finder.local"'), {
+  // Reset state: find every Stripe customer sharing this test email and
+  // cancel any active subscription on each of them, so this suite never
+  // leaves a shared/demo environment in a subscribed state.
+  //
+  // Every real run of this test creates a BRAND NEW Stripe customer (the
+  // checkout is configured with customer_creation: always, so it never
+  // reuses an existing one) - across repeated runs this leaves several
+  // customer objects sharing the same test email. Checking only the first
+  // search result (`data[0]`) is not safe: confirmed live that Stripe's
+  // customer search does not return them newest-first, so a run's cleanup
+  // could cancel a stale customer's (already-canceled) subscription while
+  // leaving the run's own real one active. Iterate every match instead.
+  const res = await fetch('https://api.stripe.com/v1/customers/search?query=' + encodeURIComponent('email:"e2e-test@food-finder.local"') + '&limit=100', {
     headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
   });
   const data = (await res.json()) as { data?: Array<{ id: string }> };
-  const customerId = data.data?.[0]?.id;
-  if (!customerId) return;
 
-  const subsRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customerId}&status=active`, {
-    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
-  });
-  const subsData = (await subsRes.json()) as { data?: Array<{ id: string }> };
-  for (const sub of subsData.data ?? []) {
-    await fetch(`https://api.stripe.com/v1/subscriptions/${sub.id}`, {
-      method: 'DELETE',
+  for (const customer of data.data ?? []) {
+    const subsRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customer.id}&status=active`, {
       headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
     });
+    const subsData = (await subsRes.json()) as { data?: Array<{ id: string }> };
+    for (const sub of subsData.data ?? []) {
+      await fetch(`https://api.stripe.com/v1/subscriptions/${sub.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
+      });
+    }
   }
 });
