@@ -9,6 +9,10 @@ build/
 .next/
 out/
 
+# Playwright's own run artifacts (screenshots, traces) - not source
+apps/web/test-results/
+apps/web/playwright-report/
+
 # prisma generated client (if generated into a custom output dir)
 apps/api/src/generated/
 
