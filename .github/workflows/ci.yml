@@ -89,3 +89,72 @@ jobs:
       - name: Build
         working-directory: apps/web
         run: npm run build
+
+  # Deploys web/api on Dokploy after both gates above pass. main only, so PR
+  # builds never deploy. There is no staging here (unlike Delta) - one
+  # environment, so this goes straight to the only Dokploy project that
+  # exists for this repo.
+  #
+  # DOKPLOY_URL/DOKPLOY_API_KEY are repo secrets (an admin-scoped Dokploy
+  # token - a restricted member token was tried first during initial setup
+  # and turned out not to have project/service-creation rights at all,
+  # see docs history). Application ids are NOT secret - they only name
+  # which containers a merge restarts, same reasoning Delta's own ci.yml
+  # documents - the API key is the actual secret.
+  deploy:
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    needs: [api, web]
+    env:
+      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+      DOKPLOY_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+      API_APP_ID: "ABs8Tg47H_-gk-U_ys8I6"
+      WEB_APP_ID: "LRiKeO5sKh5bWj5gqPfkI"
+
+    steps:
+      - name: Deploy api
+        run: |
+          curl -fsS -X POST -H "x-api-key: $DOKPLOY_KEY" -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$API_APP_ID\"}" "$DOKPLOY_URL/api/application.deploy" >/dev/null
+
+      # Dokploy's deploy call queues the build and returns immediately - a
+      # 2xx here means "accepted", not "live". Poll application.one until it
+      # reports done, the same way this project's own manual deploys were
+      # verified throughout development. No status=error case observed from
+      # Dokploy in practice; treat "never reaches done" (timeout) as the
+      # failure signal rather than relying on a specific error state.
+      - name: Wait for api
+        run: |
+          for _ in $(seq 1 30); do
+            status=$(curl -fsS "$DOKPLOY_URL/api/application.one?applicationId=$API_APP_ID" -H "x-api-key: $DOKPLOY_KEY" | jq -r .applicationStatus)
+            echo "api status: $status"
+            [ "$status" = "done" ] && exit 0
+            sleep 10
+          done
+          echo "Timed out waiting for api to finish deploying"
+          exit 1
+
+      - name: Deploy web
+        run: |
+          curl -fsS -X POST -H "x-api-key: $DOKPLOY_KEY" -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"$WEB_APP_ID\"}" "$DOKPLOY_URL/api/application.deploy" >/dev/null
+
+      - name: Wait for web
+        run: |
+          for _ in $(seq 1 30); do
+            status=$(curl -fsS "$DOKPLOY_URL/api/application.one?applicationId=$WEB_APP_ID" -H "x-api-key: $DOKPLOY_KEY" | jq -r .applicationStatus)
+            echo "web status: $status"
+            [ "$status" = "done" ] && exit 0
+            sleep 10
+          done
+          echo "Timed out waiting for web to finish deploying"
+          exit 1
+
+      # A "done" deploy status is Dokploy's own bookkeeping, not proof the
+      # app is actually serving traffic - confirm both are real.
+      - name: Health check
+        run: |
+          curl -fsS https://food-finder-api.cdlegaspi.site/health
+          echo
+          curl -fsS -o /dev/null https://food-finder.cdlegaspi.site/en
+          echo "web OK"
