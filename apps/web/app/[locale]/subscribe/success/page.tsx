@@ -18,10 +18,16 @@ export default async function SubscribeSuccessPage({ params }: Props) {
   const t = await getTranslations({ locale, namespace: 'subscriptions.successPage' });
 
   return (
-    <section style={{ maxWidth: 480, margin: '2rem auto', textAlign: 'center' }}>
-      <h1>{t('heading')}</h1>
-      <p>{t('body')}</p>
-      <Link href={`/${locale}`}>{t('backToSearchLabel')}</Link>
+    <section className="mx-auto flex max-w-md flex-col items-center gap-4 py-24 text-center">
+      {/* Small decorative dot in `accent` - the active-subscription
+          indicator called for in the design system, kept as a plain
+          decoration rather than coloring part of the heading text. */}
+      <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-accent" />
+      <h1 className="font-display text-3xl font-medium text-ink">{t('heading')}</h1>
+      <p className="text-base text-muted">{t('body')}</p>
+      <Link href={`/${locale}`} className="mt-2 text-sm font-medium text-ink underline underline-offset-4">
+        {t('backToSearchLabel')}
+      </Link>
     </section>
   );
 }

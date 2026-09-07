@@ -14,10 +14,12 @@ export default async function SubscribeCancelPage({ params }: Props) {
   const t = await getTranslations({ locale, namespace: 'subscriptions.cancelPage' });
 
   return (
-    <section style={{ maxWidth: 480, margin: '2rem auto', textAlign: 'center' }}>
-      <h1>{t('heading')}</h1>
-      <p>{t('body')}</p>
-      <Link href={`/${locale}`}>{t('backToSearchLabel')}</Link>
+    <section className="mx-auto flex max-w-md flex-col items-center gap-4 py-24 text-center">
+      <h1 className="font-display text-3xl font-medium text-ink">{t('heading')}</h1>
+      <p className="text-base text-muted">{t('body')}</p>
+      <Link href={`/${locale}`} className="mt-2 text-sm font-medium text-ink underline underline-offset-4">
+        {t('backToSearchLabel')}
+      </Link>
     </section>
   );
 }

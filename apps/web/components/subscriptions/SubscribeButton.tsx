@@ -33,11 +33,20 @@ export function SubscribeButton({ locale }: SubscribeButtonProps) {
 
   return (
     <div>
-      <button type="button" onClick={handleClick} disabled={isLoading} style={{ padding: '0.4rem 0.9rem' }}>
+      {/* The subscribe CTA: one of the very few places `accent` appears in
+          the whole app, reserved for active/unlocked states per the design
+          system - deliberately not reused for hover states or chrome
+          elsewhere. */}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isLoading}
+        className="bg-accent px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
         {isLoading ? t('startingCheckoutLabel') : t('subscribeButtonLabel')}
       </button>
       {hasError && (
-        <p role="alert" style={{ color: '#b00020', fontSize: '0.85rem', marginTop: '0.35rem' }}>
+        <p role="alert" className="mt-2 text-sm text-red-700">
           {t('checkoutErrorMessage')}
         </p>
       )}

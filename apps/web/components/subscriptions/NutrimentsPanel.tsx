@@ -32,8 +32,17 @@ export function NutrimentsPanel({ product, locale }: NutrimentsPanelProps) {
 
   if (!product.nutriments) {
     return (
-      <div style={{ borderTop: '1px solid #eee', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
-        <p style={{ fontSize: '0.85rem', color: '#777', margin: '0 0 0.5rem' }}>{t('nutrimentsLockedMessage')}</p>
+      <div className="mt-3 border-t-4 border-ink pt-3">
+        {/* Decorative: a visual suggestion of redacted nutrient rows, not a
+            replacement for the accessible message below - screen readers
+            skip this and get the real text via the <p> underneath it. */}
+        <div aria-hidden="true" className="mb-3 flex flex-col gap-1.5">
+          <span className="block h-3 w-4/5 bg-redacted" />
+          <span className="block h-3 w-1/2 bg-redacted" />
+          <span className="block h-3 w-5/6 bg-redacted" />
+          <span className="block h-3 w-2/3 bg-redacted" />
+        </div>
+        <p className="mb-3 text-sm text-muted">{t('nutrimentsLockedMessage')}</p>
         <SubscribeButton locale={locale} />
       </div>
     );
@@ -49,21 +58,15 @@ export function NutrimentsPanel({ product, locale }: NutrimentsPanelProps) {
   }
 
   return (
-    <dl
-      style={{
-        borderTop: '1px solid #eee',
-        marginTop: '0.5rem',
-        paddingTop: '0.5rem',
-        fontSize: '0.85rem',
-        display: 'grid',
-        gridTemplateColumns: '1fr auto',
-        gap: '0.15rem 0.5rem',
-      }}
-    >
+    // The one deliberately "loud" motif in the redesign, borrowed from real
+    // FDA/EU nutrition-facts panels: a bold rule directly above the data,
+    // tight per-row rules, and right-aligned tabular numerals in the mono
+    // face - used only here, not smeared across the app's calmer chrome.
+    <dl className="mt-3 divide-y divide-ink/15 border-t-4 border-ink pt-1 text-sm">
       {entries.map(({ labelKey, value }) => (
-        <div key={labelKey} style={{ display: 'contents' }}>
-          <dt style={{ color: '#555' }}>{t(`nutrimentLabels.${labelKey}`)}</dt>
-          <dd style={{ margin: 0, textAlign: 'right' }}>{value}</dd>
+        <div key={labelKey} className="flex items-baseline justify-between py-1">
+          <dt className="text-muted">{t(`nutrimentLabels.${labelKey}`)}</dt>
+          <dd className="m-0 font-mono text-ink tabular-nums">{value}</dd>
         </div>
       ))}
     </dl>
