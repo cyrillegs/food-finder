@@ -1,0 +1,43 @@
+# Build context for both apps/api/Dockerfile and apps/web/Dockerfile is the
+# repo root (needed for npm workspace resolution - see the comment at the
+# top of each Dockerfile). This file applies to that root context.
+
+# Dependencies - each Dockerfile stage runs its own `npm ci`; a locally
+# installed node_modules must never be copied in (it may contain
+# host-platform native binaries, e.g. Windows-built ones, that won't run in
+# the Linux build stage).
+**/node_modules
+
+# Build outputs - regenerated inside the image by `tsc` / `next build`.
+apps/api/dist
+apps/web/.next
+
+# Version control / editor / OS cruft.
+.git
+.github
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Env files - real secrets/local overrides must never be baked into an
+# image layer. Runtime config is supplied via `docker run -e`; the one
+# build-time exception (NEXT_PUBLIC_API_BASE_URL) goes through
+# `docker build --build-arg`, not a copied .env file.
+**/.env
+**/.env.*
+
+# Logs.
+npm-debug.log*
+*.log
+
+# Repo-local planning/notes/tooling docs - not used by either app image.
+docs
+.claude
+food-finder-plan.md
+
+# Local dev-only MySQL+Adminer compose setup - unrelated to either app image
+# (out of scope for this task; the containers it defines are what the API's
+# runtime smoke test connects to, from outside these builds).
+docker-compose.yml
+mysql-init
