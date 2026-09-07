@@ -23,6 +23,10 @@
     "unknownBrand": "Unknown brand",
     "noImageLabel": "No image"
   },
+  "recentSearches": {
+    "heading": "Recent searches",
+    "emptyMessage": "No recent searches yet."
+  },
   "subscriptions": {
     "subscribeButtonLabel": "Subscribe to unlock nutrition info",
     "startingCheckoutLabel": "Starting checkout…",

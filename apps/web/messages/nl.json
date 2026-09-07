@@ -23,6 +23,10 @@
     "unknownBrand": "Onbekend merk",
     "noImageLabel": "Geen afbeelding"
   },
+  "recentSearches": {
+    "heading": "Recente zoekopdrachten",
+    "emptyMessage": "Nog geen recente zoekopdrachten."
+  },
   "subscriptions": {
     "subscribeButtonLabel": "Abonneer om voedingswaarden te ontgrendelen",
     "startingCheckoutLabel": "Afrekenen wordt gestart…",
