@@ -13,5 +13,31 @@
     "unnamedProduct": "Unbenanntes Produkt",
     "unknownBrand": "Unbekannte Marke",
     "noImageLabel": "Kein Bild"
+  },
+  "subscriptions": {
+    "subscribeButtonLabel": "Abonnieren, um Nährwertangaben freizuschalten",
+    "startingCheckoutLabel": "Bezahlvorgang wird gestartet…",
+    "checkoutErrorMessage": "Beim Starten des Bezahlvorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+    "nutrimentsLockedMessage": "Nährwertangaben sind nur für Abonnenten verfügbar.",
+    "nutrimentLabels": {
+      "energyKcal": "Energie (kcal)",
+      "fat": "Fett",
+      "saturatedFat": "Gesättigte Fettsäuren",
+      "carbohydrates": "Kohlenhydrate",
+      "sugars": "Zucker",
+      "fiber": "Ballaststoffe",
+      "proteins": "Eiweiß",
+      "salt": "Salz"
+    },
+    "successPage": {
+      "heading": "Du hast abonniert!",
+      "body": "Dein Abonnement ist aktiv. Nährwertangaben werden jetzt bei den Suchergebnissen angezeigt.",
+      "backToSearchLabel": "Zurück zur Suche"
+    },
+    "cancelPage": {
+      "heading": "Bezahlvorgang abgebrochen",
+      "body": "Kein Problem – du kannst jederzeit über den Nährwertbereich eines Produkts abonnieren.",
+      "backToSearchLabel": "Zurück zur Suche"
+    }
   }
 }

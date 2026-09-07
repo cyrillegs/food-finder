@@ -13,5 +13,31 @@
     "unnamedProduct": "Naamloos product",
     "unknownBrand": "Onbekend merk",
     "noImageLabel": "Geen afbeelding"
+  },
+  "subscriptions": {
+    "subscribeButtonLabel": "Abonneer om voedingswaarden te ontgrendelen",
+    "startingCheckoutLabel": "Afrekenen wordt gestart…",
+    "checkoutErrorMessage": "Er is iets misgegaan bij het starten van het afrekenen. Probeer het opnieuw.",
+    "nutrimentsLockedMessage": "Voedingswaarden zijn alleen beschikbaar voor abonnees.",
+    "nutrimentLabels": {
+      "energyKcal": "Energie (kcal)",
+      "fat": "Vet",
+      "saturatedFat": "Verzadigd vet",
+      "carbohydrates": "Koolhydraten",
+      "sugars": "Suikers",
+      "fiber": "Vezels",
+      "proteins": "Eiwitten",
+      "salt": "Zout"
+    },
+    "successPage": {
+      "heading": "Je bent geabonneerd!",
+      "body": "Je abonnement is actief. Voedingswaarden verschijnen nu bij de zoekresultaten.",
+      "backToSearchLabel": "Terug naar zoeken"
+    },
+    "cancelPage": {
+      "heading": "Afrekenen geannuleerd",
+      "body": "Geen probleem - je kunt altijd abonneren via het voedingswaardegedeelte van een product.",
+      "backToSearchLabel": "Terug naar zoeken"
+    }
   }
 }

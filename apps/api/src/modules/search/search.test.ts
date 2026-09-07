@@ -1,9 +1,27 @@
 // Mocks every OFF/Search-a-licious HTTP call - these tests never hit the
 // real network. The one real call against the live API is done manually as
 // part of this module's smoke test, not here.
+//
+// Also mocks the Prisma client: since Module 3, every /api/search request
+// passes through the Subscriptions module's gating middleware
+// (subscriptions.gate.ts, applied in shared/app.ts), which looks up
+// DemoUser.subscriptionStatus before the Search route ever runs. Mocking
+// Prisma here is the equivalent, for that dependency, of mocking `fetch` for
+// the OFF dependency above - neither should hit real infrastructure in this
+// suite. The "subscription active -> nutriments included" case lives in
+// subscriptions.test.ts instead, alongside the rest of that module's gating
+// coverage, rather than being duplicated here.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
+
+// vi.mock calls are hoisted above the imports above by Vitest, so
+// shared/app.ts (and, transitively, shared/prisma.ts) never sees the real
+// Prisma client in this file.
+const findUniqueMock = vi.fn();
+vi.mock('../../shared/prisma', () => ({
+  prisma: { demoUser: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
+}));
 
 function mockOffResponse(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
   const { ok = true, status = 200 } = init;
@@ -20,6 +38,8 @@ describe('GET /api/search', () => {
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
+    // Default: demo user isn't subscribed, matching this app's normal state.
+    findUniqueMock.mockResolvedValue({ id: 1, subscriptionStatus: 'inactive' });
   });
 
   afterEach(() => {
@@ -53,6 +73,12 @@ describe('GET /api/search', () => {
             product_name_fr: 'Nutella',
             brands: ['Nutella', 'Ferrero'],
             image_url: 'https://images.openfoodfacts.org/nutella.jpg',
+            // OFF did return nutrition data for this product, but the demo
+            // user isn't subscribed (see beforeEach) - the Subscriptions
+            // module's gate should strip this key entirely from the
+            // response below. The mirror case (subscribed -> included) is
+            // covered in subscriptions.test.ts.
+            nutriments: { 'energy-kcal_100g': 539, fat_100g: 30.9 },
           },
         ],
         count: 1,
@@ -73,6 +99,7 @@ describe('GET /api/search', () => {
       totalCount: 1,
       totalPages: 1,
     });
+    expect(res.body.results[0]).not.toHaveProperty('nutriments');
     expect(res.body.results).toEqual([
       {
         code: '3017620422003',

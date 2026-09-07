@@ -7,13 +7,22 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 // Normalized product shape this module exposes to the frontend. `code` is
 // the only field guaranteed to be present - everything else is defensively
 // nullable because Open Food Facts product data is community-submitted and
-// frequently incomplete. Deliberately excludes nutriments: Module 1's UI
-// never shows nutrition data (that's gated behind Stripe in Module 2).
+// frequently incomplete.
 export interface SearchProduct {
   code: string;
   name: string | null;
   brand: string | null;
   imageUrl: string | null;
+  // Present only when Open Food Facts returned nutrition data for this
+  // product. Shape is intentionally loose - OFF's nutriments object has
+  // dozens of possible keys (`energy-kcal_100g`, `fat_100g`, `sugars_100g`,
+  // ...) that vary per product, and this module just passes it through
+  // rather than interpreting it. The Subscriptions module strips this key
+  // entirely (not just to null) from every result unless the demo user's
+  // subscription is active - see
+  // modules/subscriptions/subscriptions.gate.ts. Search itself has no
+  // gating logic of its own.
+  nutriments?: Record<string, unknown>;
 }
 
 export interface SearchResponseBody {
@@ -54,6 +63,8 @@ export interface OffSearchHit {
   // unnormalized value.
   brands?: string[] | string;
   image_url?: string;
+  // Free-form per-product nutrition data - see SearchProduct.nutriments.
+  nutriments?: Record<string, unknown>;
 }
 
 export interface OffSearchResponse {

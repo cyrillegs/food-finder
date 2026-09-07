@@ -1,13 +1,19 @@
 import { useTranslations } from 'next-intl';
 import type { SearchProduct } from '@/lib/api-client';
+import { NutrimentsPanel } from '../subscriptions/NutrimentsPanel';
 
 type ProductCardProps = {
   product: SearchProduct;
+  locale: string;
 };
 
-// Name/brand/image only - no nutrition data. Nutriments are gated behind
-// Stripe starting in Module 2 and aren't wired through to the frontend yet.
-export function ProductCard({ product }: ProductCardProps) {
+// Name/brand/image, plus a nutrition section: NutrimentsPanel renders the
+// values when the API included them (subscribed demo user) or a
+// subscribe-to-unlock affordance when it didn't - see
+// components/subscriptions/NutrimentsPanel.tsx. Gating itself is enforced
+// server-side (apps/api's subscriptions.gate.ts strips the field entirely),
+// this component just renders whatever it's given.
+export function ProductCard({ product, locale }: ProductCardProps) {
   const t = useTranslations('search');
   const name = product.name ?? t('unnamedProduct');
   const brand = product.brand ?? t('unknownBrand');
@@ -51,6 +57,7 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
       <strong>{name}</strong>
       <span style={{ color: '#555', fontSize: '0.9rem' }}>{brand}</span>
+      <NutrimentsPanel product={product} locale={locale} />
     </article>
   );
 }
