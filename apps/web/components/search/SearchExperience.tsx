@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { getRecentSearches, search, type RecentSearchEntry, type SearchProduct } from '@/lib/api-client';
+import { deleteRecentSearch, getRecentSearches, search, type RecentSearchEntry, type SearchProduct } from '@/lib/api-client';
 import { SearchBox } from './SearchBox';
 import { ResultsGrid, type SearchStatus } from './ResultsGrid';
 import { RecentSearchesPanel } from '../recent-searches/RecentSearchesPanel';
@@ -73,6 +73,23 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
   // Hero moment before any search has been made (status stays 'idle' until
   // the first submit), collapsing to a compact top bar from the moment a
   // search is in flight onward - see SearchBox's isHero prop.
+  // Optimistic-free: waits for the delete to actually succeed server-side
+  // before re-fetching, rather than removing the entry from local state
+  // immediately - this is a rare, deliberate action (not a hot path like
+  // search), so the small round-trip delay isn't worth the risk of the list
+  // briefly disagreeing with the server on a failure.
+  const handleDelete = useCallback(
+    async (id: number) => {
+      try {
+        await deleteRecentSearch(id);
+        void refreshRecentSearches();
+      } catch (err) {
+        console.error('Failed to delete recent search:', err);
+      }
+    },
+    [refreshRecentSearches],
+  );
+
   const isHero = status === 'idle';
 
   return (
@@ -84,7 +101,13 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
       }
     >
       <SearchBox onSearch={handleSearch} isLoading={status === 'loading'} isHero={isHero} />
-      <RecentSearchesPanel searches={recentSearches} onSelect={handleSearch} isLoggedIn={Boolean(user)} isHero={isHero} />
+      <RecentSearchesPanel
+        searches={recentSearches}
+        onSelect={handleSearch}
+        onDelete={handleDelete}
+        isLoggedIn={Boolean(user)}
+        isHero={isHero}
+      />
       <ResultsGrid results={results} status={status} locale={locale} subscriptionActive={subscriptionActive} />
     </section>
   );

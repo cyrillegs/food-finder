@@ -4,7 +4,8 @@ import { test, expect } from '@playwright/test';
 // query appear in the panel; search again and see both, newest first;
 // click an older entry and confirm it actually re-runs that search (not
 // just refills the input); confirm re-running the same query back-to-back
-// doesn't duplicate the entry; confirm the panel never exceeds 10 entries.
+// doesn't duplicate the entry; confirm the panel never exceeds 10 entries;
+// confirm the per-entry delete button removes only that entry.
 // This is the flow the module's build brief explicitly calls out as a
 // reasonable fit for the same real-browser treatment Module 4 set with
 // e2e/locale-switching.spec.ts.
@@ -60,12 +61,29 @@ async function login(page: import('@playwright/test').Page) {
   await page.waitForURL(/\/en$/);
 }
 
+// Scoped to the panel and, critically, `exact: true` - each entry now
+// renders two buttons (select the query, delete the entry), and the
+// delete button's accessible name is `Remove "<query>" from recent
+// searches` which otherwise substring-matches `{ name: query }` under
+// Playwright's default (non-exact) name matching, turning single-element
+// lookups into strict-mode violations.
+function entryButton(page: import('@playwright/test').Page, query: string) {
+  return page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: query, exact: true });
+}
+
+// All the query-select buttons in the panel, excluding the per-entry
+// delete buttons (visible text "×") - used by tests that count or
+// list every entry rather than looking up one by name.
+function entryButtons(page: import('@playwright/test').Page) {
+  return page.getByRole('region', { name: PANEL_LABEL }).getByRole('button').filter({ hasNotText: '×' });
+}
+
 async function runSearch(page: import('@playwright/test').Page, query: string) {
   const searchbox = page.getByRole('searchbox', { name: HEADING });
   const submit = page.getByRole('button', { name: SUBMIT, exact: true });
   await searchbox.fill(query);
   await submit.click();
-  await expect(page.getByRole('button', { name: query })).toBeVisible({ timeout: 15_000 });
+  await expect(entryButton(page, query)).toBeVisible({ timeout: 15_000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -86,8 +104,7 @@ test('a second search shows both entries, newest first', async ({ page }) => {
   await runSearch(page, first);
   await runSearch(page, second);
 
-  const panelEntries = page.getByRole('region', { name: PANEL_LABEL }).getByRole('button');
-  const texts = await panelEntries.evaluateAll((buttons) => buttons.map((b) => b.textContent));
+  const texts = await entryButtons(page).evaluateAll((buttons) => buttons.map((b) => b.textContent));
   const firstIndex = texts.indexOf(first);
   const secondIndex = texts.indexOf(second);
 
@@ -109,7 +126,7 @@ test('clicking an older recent search actually re-runs it, not just refills the 
       (res) => res.url().includes('/api/search') && res.url().includes(encodeURIComponent(older)),
       { timeout: 15_000 },
     ),
-    page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: older }).click(),
+    entryButton(page, older).click(),
   ]);
 
   // A real GET /api/search?q=<older> request firing (and succeeding) in
@@ -134,11 +151,11 @@ test('re-running the same search back-to-back does not duplicate the entry', asy
       (res) => res.url().includes('/api/search') && res.url().includes(encodeURIComponent(query)),
       { timeout: 15_000 },
     ),
-    page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: query }).click(),
+    entryButton(page, query).click(),
   ]);
   expect(response.status()).toBe(200);
 
-  await expect(page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: query })).toHaveCount(1);
+  await expect(entryButton(page, query)).toHaveCount(1);
 });
 
 test('the panel never shows more than 10 entries', async ({ page }) => {
@@ -151,11 +168,25 @@ test('the panel never shows more than 10 entries', async ({ page }) => {
     await runSearch(page, query);
   }
 
-  const panelEntries = page.getByRole('region', { name: PANEL_LABEL }).getByRole('button');
-  await expect(panelEntries).toHaveCount(10);
+  await expect(entryButtons(page)).toHaveCount(10);
 
   // The very first of these 11 searches was pushed out of the capped
   // top-10 window by the other 10 (this suite's own searches alone are
   // enough to prove the cap, regardless of any other pre-existing history).
-  await expect(page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: queries[0] })).toHaveCount(0);
+  await expect(entryButton(page, queries[0])).toHaveCount(0);
+});
+
+test('the delete button removes just that one entry and leaves the rest', async ({ page }) => {
+  const keep = nonce('keep');
+  const remove = nonce('remove');
+
+  await page.goto('/en');
+  await runSearch(page, keep);
+  await runSearch(page, remove);
+
+  const removeButtonLabel = new RegExp(`Remove.*${remove}`);
+  await page.getByRole('region', { name: PANEL_LABEL }).getByRole('button', { name: removeButtonLabel }).click();
+
+  await expect(entryButton(page, remove)).toHaveCount(0);
+  await expect(entryButton(page, keep)).toHaveCount(1);
 });

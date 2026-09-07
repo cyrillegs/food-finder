@@ -166,7 +166,7 @@ describe('Subscriptions module', () => {
 
     it('creates a subscription-mode Checkout Session for the logged-in user and returns its URL', async () => {
       mockLoggedInAs(1);
-      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: null });
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, email: 'demo1@food-finder.local', stripeCustomerId: null });
       stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session' });
 
       const res = await request(app)
@@ -181,6 +181,11 @@ describe('Subscriptions module', () => {
           mode: 'subscription',
           line_items: [{ price: 'price_test_123', quantity: 1 }],
           customer: undefined,
+          // No existing Stripe customer yet - Checkout should get the
+          // user's real email so it's pre-filled on the hosted page instead
+          // of asking them to retype an email they already gave us at
+          // login.
+          customer_email: 'demo1@food-finder.local',
           client_reference_id: '1',
           success_url: 'http://localhost:3000/fr/subscribe/success',
           cancel_url: 'http://localhost:3000/fr/subscribe/cancel',
@@ -188,9 +193,9 @@ describe('Subscriptions module', () => {
       );
     });
 
-    it('reuses an existing Stripe customer id instead of letting Stripe create a new one', async () => {
+    it('reuses an existing Stripe customer id instead of letting Stripe create a new one, and omits customer_email', async () => {
       mockLoggedInAs(1);
-      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, stripeCustomerId: 'cus_existing' });
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, email: 'demo1@food-finder.local', stripeCustomerId: 'cus_existing' });
       stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/test-session-2' });
 
       await request(app).post('/api/subscriptions/checkout-session').set('Cookie', SESSION_COOKIE).send({});
@@ -198,6 +203,12 @@ describe('Subscriptions module', () => {
       expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({ customer: 'cus_existing', client_reference_id: '1' }),
       );
+      // customer and customer_email are mutually exclusive per Stripe's API -
+      // an existing customer already carries the email, so this must be
+      // undefined (Stripe's SDK omits undefined params from the actual
+      // request), not a real value alongside `customer`.
+      const callArgs = stripeMocks.checkoutSessionsCreate.mock.calls[0][0];
+      expect(callArgs.customer_email).toBeUndefined();
     });
 
     it('falls back to English when no/invalid locale is provided', async () => {

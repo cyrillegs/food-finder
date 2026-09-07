@@ -26,7 +26,8 @@
   "recentSearches": {
     "heading": "Recent searches",
     "emptyMessage": "No recent searches yet.",
-    "loginPromptMessage": "Log in to see your search history."
+    "loginPromptMessage": "Log in to see your search history.",
+    "removeLabel": "Remove \"{query}\" from recent searches"
   },
   "auth": {
     "heading": "Log in",
