@@ -158,6 +158,36 @@ test('re-running the same search back-to-back does not duplicate the entry', asy
   await expect(entryButton(page, query)).toHaveCount(1);
 });
 
+// Regression test: dedup used to only check the single most-recently-logged
+// row, so alternating between two queries (A, B, A, B) created a new row
+// each time A or B resurfaced after the other ran in between - the panel
+// visibly filled up with two duplicate entries of each query. Confirmed
+// live on the deployed site before this was fixed. Dedup is now
+// history-wide: a query can only ever occupy one slot regardless of what
+// ran in between.
+//
+// Caveat, honestly: this account's history accumulates forever across every
+// run of this suite (see the file header), and the panel only ever shows
+// the newest 10 - so on a sufficiently long-lived demo3, an old duplicate
+// from a buggy version could get pushed out of that window before this
+// check runs, making the test pass for the wrong reason. The deterministic
+// proof of this fix is recordSearch's own unit test in
+// recent-searches.test.ts (mocked, no accumulated-history confound); this
+// is a real-browser sanity check on top of that, not a substitute for it.
+test('alternating between two queries does not duplicate either of them', async ({ page }) => {
+  const a = nonce('alt-a');
+  const b = nonce('alt-b');
+
+  await page.goto('/en');
+  await runSearch(page, a);
+  await runSearch(page, b);
+  await runSearch(page, a);
+  await runSearch(page, b);
+
+  await expect(entryButton(page, a)).toHaveCount(1);
+  await expect(entryButton(page, b)).toHaveCount(1);
+});
+
 test('the panel never shows more than 10 entries', async ({ page }) => {
   test.setTimeout(120_000);
 
