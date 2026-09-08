@@ -35,3 +35,7 @@ Thumbs.db
 # than an accident.
 docs/
 _move_log.txt
+
+# local Claude Code tooling config (project-scoped skills, etc.) - dev
+# tooling for working on this repo, not part of the submission itself.
+.claude/
