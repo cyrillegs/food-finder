@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../shared/app';
 import { applyNutrimentsGate } from './subscriptions.gate';
+import { reconcileAllSubscriptions } from './subscriptions.service';
 import type { SearchResponseBody } from '../search/search.types';
 import type Stripe from 'stripe';
 
@@ -47,6 +48,7 @@ const { userMock, sessionMock, stripeMocks, realWebhooks } = vi.hoisted(() => {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
     },
     sessionMock: {
@@ -485,6 +487,111 @@ describe('Subscriptions module', () => {
       const gated = applyNutrimentsGate(bodyWithGap, true);
       expect(gated.results[0]).not.toHaveProperty('nutriments');
       expect(gated.subscriptionActive).toBe(true);
+    });
+  });
+
+  // The webhook-gap backstop: subscriptionStatus is a mirror that only
+  // updates when a webhook lands, so these prove the reconciliation job
+  // actually detects and heals drift by asking Stripe directly, rather
+  // than just asserting it "looks right" from the implementation.
+  describe('reconcileAllSubscriptions', () => {
+    it('returns an empty list when no user has ever been through Checkout', async () => {
+      userMock.findMany.mockResolvedValue([]);
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results).toEqual([]);
+      expect(userMock.findMany).toHaveBeenCalledWith({ where: { stripeCustomerId: { not: null } } });
+    });
+
+    it('leaves a row untouched when Stripe still agrees with the local status', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 1, email: 'demo1@food-finder.local', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'active' },
+      ]);
+      stripeMocks.subscriptionsRetrieve.mockResolvedValue({ id: 'sub_1', status: 'active' });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results).toEqual([{ userId: 1, email: 'demo1@food-finder.local', previousStatus: 'active', currentStatus: 'active', changed: false }]);
+      expect(userMock.update).not.toHaveBeenCalled();
+    });
+
+    // The actual gap this exists to close: a webhook that never landed left
+    // the local row saying 'inactive' while Stripe has genuinely gone
+    // 'active' - nothing else in the app would ever catch this on its own.
+    it('heals a row whose local status drifted from Stripe (the missed-webhook case)', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 2, email: 'demo2@food-finder.local', stripeCustomerId: 'cus_2', stripeSubscriptionId: 'sub_2', subscriptionStatus: 'inactive' },
+      ]);
+      stripeMocks.subscriptionsRetrieve.mockResolvedValue({ id: 'sub_2', status: 'active' });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results).toEqual([{ userId: 2, email: 'demo2@food-finder.local', previousStatus: 'inactive', currentStatus: 'active', changed: true }]);
+      expect(userMock.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: { subscriptionStatus: 'active', stripeSubscriptionId: 'sub_2' },
+      });
+    });
+
+    it('falls back to listing the customer\'s subscriptions when no stripeSubscriptionId is on file yet', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 3, email: 'demo3@food-finder.local', stripeCustomerId: 'cus_3', stripeSubscriptionId: null, subscriptionStatus: 'inactive' },
+      ]);
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [{ id: 'sub_3', status: 'trialing' }] });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(stripeMocks.subscriptionsRetrieve).not.toHaveBeenCalled();
+      expect(stripeMocks.subscriptionsList).toHaveBeenCalledWith({ customer: 'cus_3', status: 'all', limit: 1 });
+      expect(results[0]).toEqual({ userId: 3, email: 'demo3@food-finder.local', previousStatus: 'inactive', currentStatus: 'trialing', changed: true });
+    });
+
+    it('falls back to the list lookup when the known subscription id no longer exists on Stripe', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 4, email: 'demo4@food-finder.local', stripeCustomerId: 'cus_4', stripeSubscriptionId: 'sub_gone', subscriptionStatus: 'active' },
+      ]);
+      stripeMocks.subscriptionsRetrieve.mockRejectedValue(new Error('No such subscription'));
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [{ id: 'sub_new', status: 'active' }] });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results[0]).toEqual({ userId: 4, email: 'demo4@food-finder.local', previousStatus: 'active', currentStatus: 'active', changed: false });
+    });
+
+    it('treats a fully vanished subscription (no id, empty list) as canceled', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 5, email: 'demo5@food-finder.local', stripeCustomerId: 'cus_5', stripeSubscriptionId: null, subscriptionStatus: 'active' },
+      ]);
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [] });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results[0]).toEqual({ userId: 5, email: 'demo5@food-finder.local', previousStatus: 'active', currentStatus: 'canceled', changed: true });
+      expect(userMock.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { subscriptionStatus: 'canceled', stripeSubscriptionId: null },
+      });
+    });
+
+    it('checks every user independently, mixing drifted and non-drifted rows in one run', async () => {
+      userMock.findMany.mockResolvedValue([
+        { id: 1, email: 'a@food-finder.local', stripeCustomerId: 'cus_a', stripeSubscriptionId: 'sub_a', subscriptionStatus: 'active' },
+        { id: 2, email: 'b@food-finder.local', stripeCustomerId: 'cus_b', stripeSubscriptionId: 'sub_b', subscriptionStatus: 'active' },
+      ]);
+      stripeMocks.subscriptionsRetrieve
+        .mockResolvedValueOnce({ id: 'sub_a', status: 'active' })
+        .mockResolvedValueOnce({ id: 'sub_b', status: 'canceled' });
+
+      const results = await reconcileAllSubscriptions();
+
+      expect(results).toHaveLength(2);
+      expect(results.filter((r) => r.changed)).toHaveLength(1);
+      expect(userMock.update).toHaveBeenCalledTimes(1);
+      expect(userMock.update).toHaveBeenCalledWith({
+        where: { id: 2 },
+        data: { subscriptionStatus: 'canceled', stripeSubscriptionId: 'sub_b' },
+      });
     });
   });
 });

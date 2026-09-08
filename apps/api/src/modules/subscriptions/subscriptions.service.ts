@@ -225,3 +225,70 @@ async function syncSubscriptionStatus(subscription: Stripe.Subscription): Promis
     },
   });
 }
+
+export type ReconciliationResult = {
+  userId: number;
+  email: string;
+  previousStatus: string;
+  currentStatus: string;
+  changed: boolean;
+};
+
+// Backstop for the acknowledged gap in this design: subscriptionStatus is a
+// mirror of Stripe's state that only updates when a webhook successfully
+// lands (handleCheckoutSessionCompleted / syncSubscriptionStatus above). If
+// a webhook is ever lost (network blip, Stripe outage), that user's row
+// drifts and stays stale indefinitely - nothing else in this module ever
+// re-checks it. This asks Stripe directly, for every user who has ever been
+// through Checkout, and heals any row that no longer matches. Meant to run
+// on a schedule (see src/scripts/reconcile-subscriptions.ts), not per
+// request - each user costs a real Stripe API call.
+export async function reconcileAllSubscriptions(): Promise<ReconciliationResult[]> {
+  const stripe = getStripeClient();
+  const users = await prisma.user.findMany({
+    where: { stripeCustomerId: { not: null } },
+  });
+
+  const results: ReconciliationResult[] = [];
+
+  for (const user of users) {
+    // Prefer the specific subscription we already know about - retrieving
+    // by id is unambiguous. Fall back to asking Stripe for the customer's
+    // subscriptions only if we have no id on file, or the one we had is
+    // gone (e.g. deleted on Stripe's side after being canceled).
+    let resolved: Stripe.Subscription | null = null;
+    if (user.stripeSubscriptionId) {
+      resolved = await stripe.subscriptions.retrieve(user.stripeSubscriptionId).catch(() => null);
+    }
+    if (!resolved) {
+      const list = await stripe.subscriptions.list({ customer: user.stripeCustomerId!, status: 'all', limit: 1 });
+      resolved = list.data[0] ?? null;
+    }
+
+    // No subscription found at all on Stripe's side (fully deleted, not
+    // just canceled) reads as 'canceled' locally too - there is nothing
+    // left to unlock nutriments with.
+    const currentStatus = resolved?.status ?? 'canceled';
+    const changed = currentStatus !== user.subscriptionStatus;
+
+    if (changed) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          subscriptionStatus: currentStatus,
+          stripeSubscriptionId: resolved?.id ?? user.stripeSubscriptionId,
+        },
+      });
+    }
+
+    results.push({
+      userId: user.id,
+      email: user.email,
+      previousStatus: user.subscriptionStatus,
+      currentStatus,
+      changed,
+    });
+  }
+
+  return results;
+}

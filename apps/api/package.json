@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "reconcile": "tsx src/scripts/reconcile-subscriptions.ts",
     "prisma:migrate": "prisma migrate dev && prisma generate",
     "prisma:seed": "prisma db seed"
   },
