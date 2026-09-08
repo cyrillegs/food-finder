@@ -38,7 +38,9 @@
     "loggingInLabel": "Logging in…",
     "loginErrorMessage": "Invalid email or password.",
     "loginLinkLabel": "Log in",
-    "logoutLabel": "Log out"
+    "logoutLabel": "Log out",
+    "showPasswordLabel": "Show password",
+    "hidePasswordLabel": "Hide password"
   },
   "subscriptions": {
     "subscribeButtonLabel": "Subscribe to unlock nutrition info",
