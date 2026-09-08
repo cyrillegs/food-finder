@@ -15,16 +15,28 @@ import { prisma } from '../shared/prisma';
 async function main() {
   const results = await reconcileAllSubscriptions();
   const changed = results.filter((r) => r.changed);
+  const errored = results.filter((r) => r.error);
 
   console.log(`Checked ${results.length} user(s) with a Stripe customer id.`);
+
   if (changed.length === 0) {
     console.log('No drift found - every local subscriptionStatus matches Stripe.');
-    return;
+  } else {
+    console.log(`Healed ${changed.length} drifted row(s):`);
+    for (const r of changed) {
+      console.log(`  ${r.email}: ${r.previousStatus} -> ${r.currentStatus}`);
+    }
   }
 
-  console.log(`Healed ${changed.length} drifted row(s):`);
-  for (const r of changed) {
-    console.log(`  ${r.email}: ${r.previousStatus} -> ${r.currentStatus}`);
+  if (errored.length > 0) {
+    // Per-user failures don't abort the run (see reconcileAllSubscriptions),
+    // so these users were left untouched, not confirmed unchanged - surface
+    // them so a re-run or manual check happens instead of assuming clean.
+    console.log(`${errored.length} user(s) could not be checked (left untouched, not confirmed unchanged):`);
+    for (const r of errored) {
+      console.log(`  ${r.email}: ${r.error}`);
+    }
+    process.exitCode = 1;
   }
 }
 
