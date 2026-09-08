@@ -36,14 +36,18 @@
 // so if the record write and the search response raced each other, that
 // refetch could occasionally land before the row was committed and
 // silently miss the search the user just made. Waiting costs one extra
-// local DB round-trip (two now - resolving the session, then writing the
-// row) - negligible next to the OFF request Search itself just made - in
-// exchange for the guarantee that once a client sees a successful search
-// response, asking for recent searches immediately after is guaranteed to
-// reflect it.
+// local DB round-trip - negligible next to the OFF request Search itself
+// just made - in exchange for the guarantee that once a client sees a
+// successful search response, asking for recent searches immediately after
+// is guaranteed to reflect it.
+//
+// Reads req.user rather than resolving the session itself: this middleware
+// is mounted directly after gateSearchNutriments (see shared/app.ts), which
+// already looked the session up once for the same request and stashed the
+// result there - a second identical session+user lookup here would just be
+// wasted DB round-trips for an answer already known.
 import type { NextFunction, Request, Response } from 'express';
 import { recordSearch } from './recent-searches.service';
-import { getCurrentUser } from '../auth/auth.middleware';
 
 interface SearchLikeBody {
   query: string;
@@ -72,15 +76,14 @@ export function logRecentSearch(req: Request, res: Response, next: NextFunction)
       // otherwise-successful search into a failed response, and there's no
       // reasonable way for a client to react to "your search worked but we
       // failed to remember it" anyway.
-      void getCurrentUser(req)
-        .then((user) => {
-          if (!user) {
-            // Anonymous search - nothing to attach it to, so this is
-            // intentionally not an error, just a no-op.
-            return;
-          }
-          return recordSearch(user.id, body.query);
-        })
+      const userId = req.user?.id;
+      if (userId === undefined) {
+        // Anonymous search - nothing to attach it to, so this is
+        // intentionally not an error, just a no-op.
+        originalJson(body);
+        return res;
+      }
+      void recordSearch(userId, body.query)
         .catch((err) => {
           console.error('Failed to record recent search:', err);
         })

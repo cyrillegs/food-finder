@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteRecentSearch, getRecentSearches, search, type RecentSearchEntry, type SearchProduct } from '@/lib/api-client';
 import { SearchBox } from './SearchBox';
 import { ResultsGrid, type SearchStatus } from './ResultsGrid';
@@ -21,6 +21,16 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [subscriptionActive, setSubscriptionActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState<RecentSearchEntry[]>([]);
+  // Guards against out-of-order responses: nothing here cancels the actual
+  // fetch to Open Food Facts (a request already in flight there can't be
+  // aborted mid-search without dropping the recent-search write it triggers
+  // server-side too), so a slower earlier search can still resolve after a
+  // newer one. Each call captures its own sequence number; only the result
+  // whose number still matches the latest dispatched call is applied -
+  // otherwise a fast "milk" search fired right after a slow "chocolate" one
+  // could show milk results only for chocolate's response to land a moment
+  // later and silently replace them.
+  const latestSearchIdRef = useRef(0);
 
   // GET /api/searches/recent now requires a logged-in user (401s
   // otherwise) - rather than let every anonymous visitor's page load
@@ -54,14 +64,24 @@ export function SearchExperience({ locale }: SearchExperienceProps) {
 
   const handleSearch = useCallback(
     async (query: string) => {
+      const searchId = ++latestSearchIdRef.current;
       setStatus('loading');
       try {
         const response = await search(query, locale);
+        if (searchId !== latestSearchIdRef.current) {
+          // A newer search was dispatched while this one was in flight - it
+          // already owns the loading/success state, so applying this
+          // stale result now would overwrite whatever it showed.
+          return;
+        }
         setResults(response.results);
         setSubscriptionActive(response.subscriptionActive);
         setStatus('success');
         void refreshRecentSearches();
       } catch (err) {
+        if (searchId !== latestSearchIdRef.current) {
+          return;
+        }
         console.error('Search failed:', err);
         setResults([]);
         setStatus('error');

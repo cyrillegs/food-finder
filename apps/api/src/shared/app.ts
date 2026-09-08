@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express, { type Request, type Response } from 'express';
 import { errorHandler } from './errorHandler';
+import { prisma } from './prisma';
 import { searchRouter } from '../modules/search/search.route';
 import { subscriptionsRouter } from '../modules/subscriptions/subscriptions.route';
 import { webhookRouter } from '../modules/subscriptions/webhook.route';
@@ -11,6 +12,13 @@ import { authRouter } from '../modules/auth/auth.route';
 
 export function createApp() {
   const app = express();
+
+  // Production sits behind exactly one reverse proxy (Traefik - see
+  // docker-compose.yml/Dokploy setup), so `1` trusts X-Forwarded-For from
+  // that single known hop and no further - not `true`, which would trust
+  // the header from anywhere and let a client spoof its own apparent IP by
+  // just sending one, defeating the login rate limiter below entirely.
+  app.set('trust proxy', 1);
 
   // `credentials: true` is required for the browser to actually send/accept
   // the session cookie on cross-origin requests from apps/web (fetch calls
@@ -44,8 +52,21 @@ export function createApp() {
 
   app.use(express.json());
 
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok' });
+  // Actually queries the database rather than returning a static literal:
+  // CI's deploy job polls this as its post-deploy verification, and a
+  // static 200 would pass even when a schema-changing merge left every
+  // real DB-touching route broken (this project migrates production by
+  // hand via a one-off build-stage-override deploy, not automatically in
+  // CI - see docs - so this is the only automated check that a forgotten
+  // migration actually surfaces as a deploy failure instead of a silent
+  // gap discovered only when the first real request 500s).
+  app.get('/health', async (_req: Request, res: Response) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ status: 'ok' });
+    } catch {
+      res.status(503).json({ status: 'error', error: 'Database unreachable.' });
+    }
   });
 
   // gateSearchNutriments wraps Search's response so nutriments are stripped
@@ -55,8 +76,10 @@ export function createApp() {
   // logRecentSearch is the same pattern applied by Recent Searches: it wraps
   // the response to log the query as a side effect, without modifying it -
   // see recent-searches.log.ts for why this lives here rather than inside
-  // search.route.ts. Order between the two middlewares doesn't matter (each
-  // wraps whatever res.json currently is), so they're listed in mount order.
+  // search.route.ts. Order NOW matters, unlike before: gateSearchNutriments
+  // resolves the session and stashes the result on req.user, and
+  // logRecentSearch reads req.user instead of re-resolving the same session
+  // itself - two DB round-trips per logged-in search collapsed into one.
   app.use('/api/auth', authRouter);
   app.use('/api/search', gateSearchNutriments, logRecentSearch, searchRouter);
   app.use('/api/subscriptions', subscriptionsRouter);

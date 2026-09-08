@@ -61,6 +61,11 @@ function looksLikeSearchResponseBody(body: unknown): body is SearchResponseBody 
 // gating exists.
 export async function gateSearchNutriments(req: Request, res: Response, next: NextFunction): Promise<void> {
   const user = await getCurrentUser(req);
+  // Stashed for logRecentSearch (mounted right after this in shared/app.ts)
+  // to read instead of resolving the session a second time - two serial DB
+  // round-trips (session lookup, then user lookup) per logged-in search,
+  // collapsed into one.
+  req.user = user ?? undefined;
   const unlocked = user?.subscriptionStatus === 'active';
   const originalJson = res.json.bind(res);
 

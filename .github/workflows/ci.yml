@@ -20,7 +20,13 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only cancel PR runs, not push-to-master runs: an unconditional true here
+  # actually cancelled a production deploy mid-flight once (PR #17's push
+  # cancelled PR #16's still-running `deploy` job) - a new commit on a PR
+  # branch obsoleting the old PR's checks is the case this exists for, and
+  # push-to-master is exactly when `deploy` runs. Sequential master pushes
+  # now queue instead of racing.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   api:

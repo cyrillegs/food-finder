@@ -10,6 +10,7 @@
 // mocking it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { createHash } from 'crypto';
 import { app } from '../../shared/app';
 import { hashPassword } from './auth.service';
 
@@ -88,6 +89,17 @@ describe('Auth module', () => {
       expect(sessionMock.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ userId: 1 }) }),
       );
+
+      // The actual security property this suite otherwise only asserts by
+      // implication: the raw token the browser gets is never what lands in
+      // the database. Previously nothing checked this - a regression that
+      // stored the plaintext token as tokenHash would have passed every
+      // existing test here (they only ever checked `userId`).
+      const rawToken = (sessionCookie as string).split('ff_session=')[1].split(';')[0];
+      expect(rawToken).toBeTruthy();
+      const storedTokenHash = sessionMock.create.mock.calls[0][0].data.tokenHash;
+      expect(storedTokenHash).not.toBe(rawToken);
+      expect(storedTokenHash).toBe(createHash('sha256').update(rawToken).digest('hex'));
     });
 
     it('rejects a wrong password with a generic error - indistinguishable from an unknown email', async () => {
@@ -129,6 +141,27 @@ describe('Auth module', () => {
       const res = await request(app).post('/api/auth/login').send({ email: TEST_EMAIL, password: 'wrong' });
 
       expect(res.headers['set-cookie']).toBeUndefined();
+    });
+
+    // Placed last in this describe block deliberately: express-rate-limit's
+    // MemoryStore lives on the shared `app` singleton this whole file
+    // imports once, so every /login request above already counts against
+    // the same 15-minute window (all from supertest's default 127.0.0.1) -
+    // running this any earlier would eat into the quota the tests above it
+    // rely on getting a real 200/401 rather than a 429. Fires well past the
+    // configured limit rather than the exact count, so it stays correct
+    // regardless of exactly how many requests the tests above already
+    // consumed.
+    it('rate-limits repeated login attempts from the same IP', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 25; i++) {
+        const res = await request(app).post('/api/auth/login').send({ email: TEST_EMAIL, password: 'wrong' });
+        statuses.push(res.status);
+      }
+
+      expect(statuses).toContain(429);
     });
   });
 
