@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Slab-serif F on ink. The heavy horizontal bars deliberately echo the
+       nutrition-facts rules the whole UI is built around, and read as solid
+       shapes at 16px where finer detail would turn to mush. Ink/paper only:
+       `accent` is reserved for active/unlocked states in the UI, so spending
+       it on app chrome would undercut that rule. -->
+  <rect width="32" height="32" rx="6" fill="#17181a"/>
+  <g fill="#f6f7f5">
+    <rect x="9.5" y="7" width="13.5" height="4.6"/>
+    <rect x="9.5" y="7" width="4.6" height="18"/>
+    <rect x="9.5" y="14.6" width="9.8" height="4.2"/>
+  </g>
+</svg>

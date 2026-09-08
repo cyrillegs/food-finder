@@ -1,6 +1,7 @@
 {
   "common": {
-    "title": "Food Finder"
+    "title": "Food Finder",
+    "description": "Recherchez des produits alimentaires emballés par nom ou par marque, en anglais, néerlandais, allemand et français. Les informations nutritionnelles détaillées sont réservées aux abonnés."
   },
   "languageSwitcher": {
     "label": "Langue",

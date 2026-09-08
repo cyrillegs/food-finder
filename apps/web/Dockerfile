@@ -84,6 +84,12 @@ ARG NEXT_PUBLIC_API_BASE_URL
 # the big comment at the top of this file. Exporting the ARG as an ENV here
 # is what makes that value visible to the build step below.
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+# The site's OWN public origin, used only to build absolute Open Graph URLs
+# (see app/[locale]/layout.tsx). Distinct from the API origin above. If it is
+# missing the app still works, but link previews fall back to localhost, so
+# it is passed at build time alongside the API URL rather than at runtime.
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ENV NODE_ENV=production
 
 RUN npm run build --workspace=@food-finder/web
