@@ -101,3 +101,43 @@ test('cycles through all four locales from the home page without getting stuck',
     await expect(page.getByTestId('language-switcher')).toHaveAttribute('data-current-locale', target);
   }
 });
+
+// Keyboard/focus regressions in the hand-rolled listbox, all of which were
+// real bugs at some point: a Tab out of the open list unmounted the focused
+// <li> and dropped focus to <body>; committing a locale change disabled the
+// button we had just focused (and, separately, the ensuing route change
+// remounts the component, so focus has to be restored on the far side);
+// and the value span used a hardcoded DOM id that aria-labelledby would
+// resolve ambiguously if the switcher ever rendered twice.
+//
+// Unlike the rest of this file, these need no API/search round-trip - the
+// switcher is entirely client-side.
+test('keyboard focus survives opening, tabbing out of, and committing from the switcher', async ({ page }) => {
+  await page.goto('/en');
+  const switcher = page.getByTestId('language-switcher');
+
+  const labelledBy = await switcher.getAttribute('aria-labelledby');
+  expect(labelledBy).toBeTruthy();
+  const idCounts = await page.evaluate(
+    (ids) => ids.map((id) => document.querySelectorAll(`[id="${id}"]`).length),
+    (labelledBy as string).split(' '),
+  );
+  expect(idCounts).toEqual([1, 1]);
+
+  await switcher.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+
+  await switcher.click();
+  await page.locator('[role="option"][data-locale="de"]').click();
+  await page.waitForURL(/\/de$/);
+  await expect(switcher).toHaveAttribute('data-current-locale', 'de');
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+
+  await switcher.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(switcher).toHaveAttribute('data-current-locale', 'de');
+});

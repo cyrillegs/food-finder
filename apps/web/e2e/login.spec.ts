@@ -107,19 +107,30 @@ test('logging out returns to the logged-out state', async ({ page }) => {
 // instead of one.
 test('two different logged-in users see separate Recent Searches histories', async ({ page }) => {
   const demo1Query = nonce('demo1-only');
+  const demo2Query = nonce('demo2-only');
+  const panel = page.getByRole('region', { name: RECENT_SEARCHES_LABEL });
 
   await login(page, DEMO1);
   const searchbox = page.getByRole('searchbox', { name: SEARCH_HEADING });
   await searchbox.fill(demo1Query);
   await page.getByRole('button', { name: SEARCH_SUBMIT, exact: true }).click();
-  await expect(
-    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query, exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByRole('button', { name: demo1Query, exact: true })).toBeVisible({ timeout: 15_000 });
 
   await logout(page);
   await login(page, DEMO2);
 
-  await expect(
-    page.getByRole('region', { name: RECENT_SEARCHES_LABEL }).getByRole('button', { name: demo1Query, exact: true }),
-  ).toHaveCount(0);
+  // Demo2 runs its OWN search first, and we wait for that entry to appear,
+  // before asserting demo1's query is absent. Without this the absence check
+  // is vacuous: straight after login the panel renders empty while demo2's
+  // GET /api/searches/recent is still in flight, so `toHaveCount(0)` passes
+  // against a panel that simply hasn't loaded yet - it would still pass if
+  // the API were leaking demo1's history to demo2, which is the single thing
+  // this test exists to rule out. Waiting for demo2's own entry proves the
+  // panel is populated with demo2's real, loaded history at the moment the
+  // absence is checked.
+  await searchbox.fill(demo2Query);
+  await page.getByRole('button', { name: SEARCH_SUBMIT, exact: true }).click();
+  await expect(panel.getByRole('button', { name: demo2Query, exact: true })).toBeVisible({ timeout: 15_000 });
+
+  await expect(panel.getByRole('button', { name: demo1Query, exact: true })).toHaveCount(0);
 });

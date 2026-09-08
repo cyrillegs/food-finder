@@ -22,6 +22,57 @@ function resolveStripeId(value: string | { id: string } | null | undefined): str
   return typeof value === 'string' ? value : value.id;
 }
 
+// Thrown when a user who already has a live subscription tries to start
+// another Checkout. The route maps this to a 409 rather than a 500 - it's a
+// "you already have this" answer, not a failure.
+export class AlreadySubscribedError extends Error {
+  constructor() {
+    super('This account already has an active subscription.');
+    this.name = 'AlreadySubscribedError';
+  }
+}
+
+// Stripe statuses that mean "this person already has a subscription, don't
+// sell them another one". `incomplete`/`incomplete_expired` are deliberately
+// excluded: those are checkouts whose first payment never succeeded, and
+// blocking on them would strand a user whose card was declined and who is
+// legitimately retrying. `canceled`/`unpaid` are terminal.
+const LIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due']);
+
+type LiveSubscription = { customerId: string; subscriptionId: string; status: string };
+
+// Asks Stripe (not the local row) whether this user already has a live
+// subscription. Checks the known customer first, then falls back to looking
+// up customers by email - which is what catches the mid-race case, where a
+// brand-new customer was minted during a Checkout whose webhook hasn't
+// landed yet, so the local row has no stripeCustomerId to search by.
+// `customers.list({email})` rather than `customers.search()` on purpose:
+// search is eventually consistent (a customer created seconds ago may not
+// be indexed yet), and this race is measured in seconds.
+async function findLiveSubscription(stripe: Stripe, user: { email: string; stripeCustomerId: string | null }): Promise<LiveSubscription | null> {
+  const customerIds: string[] = [];
+  if (user.stripeCustomerId) {
+    customerIds.push(user.stripeCustomerId);
+  }
+
+  const byEmail = await stripe.customers.list({ email: user.email, limit: 20 });
+  for (const customer of byEmail.data) {
+    if (!customerIds.includes(customer.id)) {
+      customerIds.push(customer.id);
+    }
+  }
+
+  for (const customerId of customerIds) {
+    const subscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+    const liveOne = subscriptions.data.find((s) => LIVE_SUBSCRIPTION_STATUSES.has(s.status));
+    if (liveOne) {
+      return { customerId, subscriptionId: liveOne.id, status: liveOne.status };
+    }
+  }
+
+  return null;
+}
+
 // Creates a subscription-mode Checkout Session for the given user and
 // returns its hosted URL. `webOrigin` and `locale` are supplied by the
 // route (not read from env here) so this stays testable without stubbing
@@ -36,6 +87,28 @@ export async function createCheckoutSession(webOrigin: string, locale: string, u
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   const stripe = getStripeClient();
+
+  // Refuse to open a second Checkout for someone who is already paying.
+  // The local status alone is not enough to decide this: between finishing
+  // Checkout and the webhook landing, the row still says `inactive`, so the
+  // UI still renders the Subscribe button and a second click here would
+  // mint a SECOND Stripe customer and a SECOND concurrently-billed
+  // subscription - with the first one then orphaned, since
+  // syncSubscriptionStatus matches users by stripeCustomerId and the row
+  // now points at the newer customer. So this asks Stripe directly, which
+  // is authoritative even mid-race, and heals the local row from the answer.
+  const live = await findLiveSubscription(stripe, user);
+  if (live) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        stripeCustomerId: live.customerId,
+        stripeSubscriptionId: live.subscriptionId,
+        subscriptionStatus: live.status,
+      },
+    });
+    throw new AlreadySubscribedError();
+  }
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',

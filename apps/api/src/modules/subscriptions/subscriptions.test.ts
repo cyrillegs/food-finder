@@ -55,6 +55,10 @@ const { userMock, sessionMock, stripeMocks, realWebhooks } = vi.hoisted(() => {
     stripeMocks: {
       checkoutSessionsCreate: vi.fn(),
       subscriptionsRetrieve: vi.fn(),
+      // Used by createCheckoutSession's duplicate-subscription guard, which
+      // asks Stripe (not the local row) whether this user is already paying.
+      customersList: vi.fn(),
+      subscriptionsList: vi.fn(),
     },
     realWebhooks: StripeCtor.webhooks,
   };
@@ -67,7 +71,8 @@ vi.mock('../../shared/prisma', () => ({
 vi.mock('./stripe-client', () => ({
   getStripeClient: () => ({
     checkout: { sessions: { create: stripeMocks.checkoutSessionsCreate } },
-    subscriptions: { retrieve: stripeMocks.subscriptionsRetrieve },
+    subscriptions: { retrieve: stripeMocks.subscriptionsRetrieve, list: stripeMocks.subscriptionsList },
+    customers: { list: stripeMocks.customersList },
     webhooks: realWebhooks,
   }),
 }));
@@ -150,6 +155,11 @@ describe('Subscriptions module', () => {
     process.env.STRIPE_PRICE_ID = 'price_test_123';
     process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
     process.env.CORS_ORIGIN = 'http://localhost:3000';
+    // Default: Stripe reports no existing customer/subscription for this
+    // user, so createCheckoutSession's duplicate guard finds nothing and
+    // proceeds. Tests that exercise the guard override these.
+    stripeMocks.customersList.mockResolvedValue({ data: [] });
+    stripeMocks.subscriptionsList.mockResolvedValue({ data: [] });
   });
 
   afterEach(() => {
@@ -235,6 +245,70 @@ describe('Subscriptions module', () => {
 
       expect(userMock.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 2 } });
       expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalledWith(expect.objectContaining({ client_reference_id: '2' }));
+    });
+
+    // The double-billing guard. The dangerous window is between finishing
+    // Checkout and the webhook landing: the local row still says inactive,
+    // so the UI still offers Subscribe, and without this guard a second
+    // click would mint a second customer and a second live subscription.
+    it('refuses with 409 when Stripe reports the user already has a live subscription', async () => {
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, email: 'demo1@food-finder.local', stripeCustomerId: null });
+      // The local row knows no customer yet (mid-race), but Stripe does -
+      // found by email, which is why the guard looks it up that way.
+      stripeMocks.customersList.mockResolvedValue({ data: [{ id: 'cus_race_1' }] });
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [{ id: 'sub_race_1', status: 'active' }] });
+
+      const res = await request(app)
+        .post('/api/subscriptions/checkout-session')
+        .set('Cookie', SESSION_COOKIE)
+        .send({ locale: 'en' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('already_subscribed');
+      // The critical assertion: no second Checkout Session was opened.
+      expect(stripeMocks.checkoutSessionsCreate).not.toHaveBeenCalled();
+      // And the local row is healed from Stripe's answer, so the gate
+      // unlocks immediately instead of waiting for the late webhook.
+      expect(userMock.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { stripeCustomerId: 'cus_race_1', stripeSubscriptionId: 'sub_race_1', subscriptionStatus: 'active' },
+      });
+    });
+
+    it('still allows checkout when the only prior subscription is canceled', async () => {
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, email: 'demo1@food-finder.local', stripeCustomerId: 'cus_old' });
+      stripeMocks.customersList.mockResolvedValue({ data: [{ id: 'cus_old' }] });
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [{ id: 'sub_old', status: 'canceled' }] });
+      stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/resubscribe' });
+
+      const res = await request(app)
+        .post('/api/subscriptions/checkout-session')
+        .set('Cookie', SESSION_COOKIE)
+        .send({ locale: 'en' });
+
+      expect(res.status).toBe(200);
+      expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalled();
+    });
+
+    // A declined first payment leaves an `incomplete` subscription behind.
+    // Treating that as "already subscribed" would strand the user with no
+    // way to retry, so it must NOT block a fresh checkout.
+    it('still allows checkout when a prior attempt is stuck incomplete', async () => {
+      mockLoggedInAs(1);
+      userMock.findUniqueOrThrow.mockResolvedValue({ id: 1, email: 'demo1@food-finder.local', stripeCustomerId: null });
+      stripeMocks.customersList.mockResolvedValue({ data: [{ id: 'cus_incomplete' }] });
+      stripeMocks.subscriptionsList.mockResolvedValue({ data: [{ id: 'sub_incomplete', status: 'incomplete' }] });
+      stripeMocks.checkoutSessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/retry' });
+
+      const res = await request(app)
+        .post('/api/subscriptions/checkout-session')
+        .set('Cookie', SESSION_COOKIE)
+        .send({ locale: 'en' });
+
+      expect(res.status).toBe(200);
+      expect(stripeMocks.checkoutSessionsCreate).toHaveBeenCalled();
     });
   });
 

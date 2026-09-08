@@ -105,30 +105,57 @@ test('search -> subscribe via real Stripe Checkout -> nutriments unlock', async 
   await expect(firstCard.getByText('Nutrition info is available to subscribers.')).not.toBeVisible();
 });
 
-test.afterAll(async () => {
-  // Reset state: find every Stripe customer sharing this test email and
-  // cancel any active subscription on each of them, so this suite never
-  // leaves a shared/demo environment in a subscribed state.
-  //
-  // Every real run of this test creates a BRAND NEW Stripe customer (the
-  // checkout is configured with customer_creation: always, so it never
-  // reuses an existing one) - across repeated runs this leaves several
-  // customer objects sharing the same test email. Checking only the first
-  // search result (`data[0]`) is not safe: confirmed live that Stripe's
-  // customer search does not return them newest-first, so a run's cleanup
-  // could cancel a stale customer's (already-canceled) subscription while
-  // leaving the run's own real one active. Iterate every match instead.
-  const res = await fetch('https://api.stripe.com/v1/customers/search?query=' + encodeURIComponent('email:"e2e-test@food-finder.local"') + '&limit=100', {
-    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
-  });
-  const data = (await res.json()) as { data?: Array<{ id: string }> };
+// Emails that a Checkout run by this suite can have attached to the Stripe
+// Customer it creates. DEMO_ACCOUNT.email is the one that matters now: the
+// API sends `customer_email: user.email` when creating the Checkout Session,
+// so Stripe stamps the seeded account's address onto the new customer. The
+// literal below is the address Checkout used to collect by hand, before that
+// change - kept so this cleanup still reaches customers left behind by older
+// runs. Cleaning up by the wrong address is not a no-op failure: it silently
+// leaves the account subscribed, which then breaks this suite's own opening
+// "nutriments are locked" assertion on the next run, and leaves a reviewer
+// looking at an already-unlocked demo. That is exactly what happened.
+const CLEANUP_EMAILS = [DEMO_ACCOUNT.email, 'e2e-test@food-finder.local'];
 
-  for (const customer of data.data ?? []) {
-    const subsRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customer.id}&status=active`, {
+// Stripe statuses worth cancelling. Not just 'active': a subscription in
+// 'trialing' or 'past_due' is still live and still leaves the account
+// unlocked, so filtering the list request to status=active alone would walk
+// straight past them.
+const CANCELABLE_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid', 'incomplete']);
+
+test.afterAll(async () => {
+  // Reset state: find every Stripe customer this suite could have created
+  // and cancel any live subscription on each, so a run never leaves a shared
+  // demo environment in a subscribed state.
+  //
+  // Every real run creates a BRAND NEW customer (customer_creation: always),
+  // so repeated runs leave several customers sharing an address - iterate
+  // all of them rather than trusting the first result to be the newest.
+  //
+  // `/v1/customers?email=` (list), NOT `/v1/customers/search`: search is
+  // eventually consistent, and the customer this run just created may not be
+  // indexed yet when this hook runs seconds later. List filters by exact
+  // email and is strongly consistent.
+  const customerIds = new Set<string>();
+  for (const email of CLEANUP_EMAILS) {
+    const res = await fetch(`https://api.stripe.com/v1/customers?email=${encodeURIComponent(email)}&limit=100`, {
       headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
     });
-    const subsData = (await subsRes.json()) as { data?: Array<{ id: string }> };
+    const data = (await res.json()) as { data?: Array<{ id: string }> };
+    for (const customer of data.data ?? []) {
+      customerIds.add(customer.id);
+    }
+  }
+
+  for (const customerId of customerIds) {
+    const subsRes = await fetch(`https://api.stripe.com/v1/subscriptions?customer=${customerId}&status=all&limit=100`, {
+      headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
+    });
+    const subsData = (await subsRes.json()) as { data?: Array<{ id: string; status: string }> };
     for (const sub of subsData.data ?? []) {
+      if (!CANCELABLE_STATUSES.has(sub.status)) {
+        continue;
+      }
       await fetch(`https://api.stripe.com/v1/subscriptions/${sub.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },

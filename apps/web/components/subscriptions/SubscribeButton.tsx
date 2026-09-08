@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { createCheckoutSession } from '@/lib/api-client';
+import { CheckoutSessionRequestError, createCheckoutSession } from '@/lib/api-client';
 import { useAuth } from '@/components/auth/AuthProvider';
 
 type SubscribeButtonProps = {
@@ -35,6 +35,16 @@ export function SubscribeButton({ locale }: SubscribeButtonProps) {
       const url = await createCheckoutSession(locale);
       window.location.href = url;
     } catch (err) {
+      // 409 means the API found a live subscription for this account that
+      // this page didn't know about yet - the usual cause being that the
+      // Stripe webhook landed after the page was rendered. Showing the
+      // generic failure message would be actively wrong (they ARE
+      // subscribed), so reload instead: auth state re-resolves as
+      // subscribed and the next search returns unlocked nutriments.
+      if (err instanceof CheckoutSessionRequestError && err.status === 409) {
+        window.location.reload();
+        return;
+      }
       console.error('Failed to start checkout:', err);
       setHasError(true);
       setIsLoading(false);

@@ -23,6 +23,17 @@ import { FlagIcon } from './FlagIcon';
 // dropdown by hand. Implements the WAI-ARIA "select-only combobox"
 // pattern: a button that owns the visible current value, toggling a
 // role="listbox" of role="option"s, with roving focus between them.
+// Survives the remount that a locale change causes. Switching locale
+// navigates between `[locale]` route segments, so React tears down this
+// component and builds a fresh one - the button that had focus is a dead DOM
+// node by the time the new tree renders, and focus lands on <body>. Calling
+// focus() inside commit() therefore cannot work on its own; the intent has
+// to outlive the unmount. Module scope does that (client-side navigation
+// keeps the module loaded) without reaching for sessionStorage, and it
+// resets naturally on a full page load, so arriving directly at /de never
+// steals focus.
+let pendingFocusRestore = false;
+
 export function LanguageSwitcher() {
   const t = useTranslations('languageSwitcher');
   const locale = useLocale() as Locale;
@@ -36,6 +47,10 @@ export function LanguageSwitcher() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLLIElement | null>>([]);
   const labelId = useId();
+  // Derived from useId rather than a hardcoded string: two switchers on one
+  // page (e.g. a header and a footer copy) would otherwise emit duplicate
+  // DOM ids, and aria-labelledby would resolve to whichever one came first.
+  const valueId = `${labelId}-value`;
 
   // Closes on an outside click - the listbox isn't a native popover, so
   // nothing does this automatically.
@@ -58,6 +73,16 @@ export function LanguageSwitcher() {
     }
   }, [open, activeIndex]);
 
+  // Re-focuses the trigger on the far side of a locale change (see
+  // pendingFocusRestore above), so a keyboard user who just switched
+  // language keeps their place instead of being dropped back to <body>.
+  useEffect(() => {
+    if (pendingFocusRestore) {
+      pendingFocusRestore = false;
+      buttonRef.current?.focus();
+    }
+  }, []);
+
   function openListbox() {
     setActiveIndex(routing.locales.indexOf(locale));
     setOpen(true);
@@ -69,6 +94,9 @@ export function LanguageSwitcher() {
     if (!hasLocale(routing.locales, nextLocale) || nextLocale === locale) {
       return;
     }
+    // The focus() above only holds until this navigation remounts the
+    // component; the flag is what carries the intent across that boundary.
+    pendingFocusRestore = true;
     startTransition(() => {
       router.replace(pathname, { locale: nextLocale });
     });
@@ -110,6 +138,13 @@ export function LanguageSwitcher() {
         buttonRef.current?.focus();
         break;
       case 'Tab':
+        // Move focus back to the trigger BEFORE closing, without preventing
+        // the default. Closing alone would unmount the focused <li> out from
+        // under the browser mid-keypress, which drops focus to <body> and
+        // restarts tab order at the top of the page. Handing focus to the
+        // button first means the browser's own Tab traversal continues from
+        // the switcher, which is where the user actually was.
+        buttonRef.current?.focus();
         setOpen(false);
         break;
     }
@@ -124,16 +159,24 @@ export function LanguageSwitcher() {
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
-          aria-labelledby={`${labelId} language-switcher-value`}
+          aria-labelledby={`${labelId} ${valueId}`}
           data-testid="language-switcher"
           data-current-locale={locale}
-          disabled={isPending}
+          // `aria-busy` rather than `disabled` during the locale transition:
+          // commit() deliberately returns focus to this button, and
+          // disabling it immediately afterwards makes the browser blur it,
+          // dumping focus onto <body> after every language switch. Staying
+          // enabled keeps focus where the user left it; a repeat click
+          // during the transition just re-navigates to the same place.
+          aria-busy={isPending}
           onClick={() => (open ? setOpen(false) : openListbox())}
           onKeyDown={handleButtonKeyDown}
-          className="flex items-center gap-2 border border-ink/20 bg-paper px-2 py-1 text-sm text-ink focus:border-ink focus:outline-none disabled:opacity-60"
+          className={`flex items-center gap-2 border border-ink/20 bg-paper px-2 py-1 text-sm text-ink transition-opacity focus:border-ink focus:outline-none ${
+            isPending ? 'opacity-60' : ''
+          }`}
         >
           <FlagIcon locale={locale} />
-          <span id="language-switcher-value">{t(`languageNames.${locale}`)}</span>
+          <span id={valueId}>{t(`languageNames.${locale}`)}</span>
           <span aria-hidden="true" className="text-muted">
             ▾
           </span>
