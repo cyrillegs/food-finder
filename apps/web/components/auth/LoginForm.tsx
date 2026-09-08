@@ -99,13 +99,13 @@ export function LoginForm() {
             required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full border-b border-ink/30 bg-transparent px-1 py-2 pr-8 text-base text-ink focus:border-ink focus:outline-none"
+            className="w-full border-b border-ink/30 bg-transparent px-1 py-2 pr-10 text-base text-ink focus:border-ink focus:outline-none"
           />
           <button
             type="button"
             onClick={() => setIsPasswordVisible((visible) => !visible)}
             aria-label={isPasswordVisible ? t('hidePasswordLabel') : t('showPasswordLabel')}
-            className="absolute right-0 flex items-center justify-center text-muted transition-colors hover:text-ink focus:outline-none"
+            className="absolute right-0 flex items-center justify-center p-1.5 text-muted transition-colors hover:text-ink focus:outline-none"
           >
             {isPasswordVisible ? <EyeOffIcon /> : <EyeIcon />}
           </button>
