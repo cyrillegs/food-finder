@@ -225,3 +225,108 @@ async function syncSubscriptionStatus(subscription: Stripe.Subscription): Promis
     },
   });
 }
+
+export type ReconciliationResult = {
+  userId: number;
+  email: string;
+  previousStatus: string;
+  currentStatus: string;
+  changed: boolean;
+  // Set only when this user's Stripe call itself failed (rate limit,
+  // network blip, bad id) - currentStatus/changed reflect "left untouched",
+  // not "confirmed unchanged", when this is present.
+  error?: string;
+};
+
+// Backstop for the acknowledged gap in this design: subscriptionStatus is a
+// mirror of Stripe's state that only updates when a webhook successfully
+// lands (handleCheckoutSessionCompleted / syncSubscriptionStatus above). If
+// a webhook is ever lost (network blip, Stripe outage), that user's row
+// drifts and stays stale indefinitely - nothing else in this module ever
+// re-checks it. This asks Stripe directly, for every user who has ever been
+// through Checkout, and heals any row that no longer matches. Meant to run
+// on a schedule (see src/scripts/reconcile-subscriptions.ts), not per
+// request - each user costs a real Stripe API call.
+//
+// Deliberately does NOT retrieve-by-id first: a canceled Subscription
+// object is never actually deleted on Stripe's side and stays retrievable
+// by id indefinitely (confirmed against Stripe's own API docs - DELETE
+// /v1/subscriptions/:id itself just returns the object with
+// status:'canceled'), so a stale stripeSubscriptionId pointing at an old,
+// genuinely-canceled subscription would keep "succeeding" forever and mask
+// a newer subscription the user created after resubscribing - exactly the
+// missed-webhook case this job exists to catch. Always lists the
+// customer's subscriptions instead (same cost as one retrieve-by-id call)
+// and prefers a live one, the same way findLiveSubscription above does,
+// rather than trusting Stripe's list ordering to put the relevant one
+// first.
+//
+// Known, accepted gap: only reconciles users who already have a
+// stripeCustomerId on file, which itself is only ever set once
+// checkout.session.completed lands. A user whose very first webhook is the
+// one that got lost has no local trace to reconcile from at all - closing
+// that would mean periodically searching Stripe by email for every user,
+// a materially bigger operation than this backstop, and out of scope here.
+export async function reconcileAllSubscriptions(): Promise<ReconciliationResult[]> {
+  const stripe = getStripeClient();
+  const users = await prisma.user.findMany({
+    where: { stripeCustomerId: { not: null } },
+    select: { id: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true, subscriptionStatus: true },
+  });
+
+  const results: ReconciliationResult[] = [];
+
+  for (const user of users) {
+    try {
+      const list = await stripe.subscriptions.list({ customer: user.stripeCustomerId!, status: 'all', limit: 100 });
+      // Prefer a live one if the customer has more than one subscription
+      // record (e.g. an abandoned duplicate checkout alongside the real
+      // one) - falls back to whatever Stripe returns first only when none
+      // of them are live.
+      const resolved = list.data.find((s) => LIVE_SUBSCRIPTION_STATUSES.has(s.status)) ?? list.data[0] ?? null;
+
+      // No subscription found at all (fully absent from the list, not just
+      // canceled) reads as 'canceled' locally too - there is nothing left
+      // to unlock nutriments with.
+      const currentStatus = resolved?.status ?? 'canceled';
+      // Id drift matters even when the status string happens to match (a
+      // canceled-then-resubscribed customer can land on the same status by
+      // coincidence) - comparing both is what actually "heals" the row
+      // rather than silently leaving a stale id in place.
+      const changed = currentStatus !== user.subscriptionStatus || resolved?.id !== user.stripeSubscriptionId;
+
+      if (changed) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionStatus: currentStatus,
+            stripeSubscriptionId: resolved?.id ?? null,
+          },
+        });
+      }
+
+      results.push({
+        userId: user.id,
+        email: user.email,
+        previousStatus: user.subscriptionStatus,
+        currentStatus,
+        changed,
+      });
+    } catch (err) {
+      // One user's Stripe failure (rate limit, network blip, a rejected
+      // customer id) must not abort the whole run - record it and move on,
+      // so a scheduled run still heals everyone it safely can instead of
+      // silently discarding every result gathered so far.
+      results.push({
+        userId: user.id,
+        email: user.email,
+        previousStatus: user.subscriptionStatus,
+        currentStatus: user.subscriptionStatus,
+        changed: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return results;
+}
