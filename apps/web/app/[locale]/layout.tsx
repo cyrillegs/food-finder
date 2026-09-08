@@ -65,7 +65,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const t = await getTranslations({ locale, namespace: 'common' });
   const title = t('title');
   const description = t('description');
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  // `||`, not `??`: a build that receives the ARG unset comes through as an
+  // empty string, not undefined, and `new URL('')` throws ERR_INVALID_URL -
+  // which crashed the production build outright the first time this shipped
+  // (Dokploy runs its own build from a fresh clone with its own configured
+  // build-args, separate from CI's docker build step - so a build-arg added
+  // only to the CI workflow doesn't reach it). Same class of bug as the
+  // CORS_ORIGIN fallback fixed for the same reason.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
   return {
     metadataBase: new URL(siteUrl),
