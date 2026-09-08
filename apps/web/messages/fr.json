@@ -38,7 +38,9 @@
     "loggingInLabel": "Connexion en cours…",
     "loginErrorMessage": "E-mail ou mot de passe invalide.",
     "loginLinkLabel": "Connexion",
-    "logoutLabel": "Déconnexion"
+    "logoutLabel": "Déconnexion",
+    "showPasswordLabel": "Afficher le mot de passe",
+    "hidePasswordLabel": "Masquer le mot de passe"
   },
   "subscriptions": {
     "subscribeButtonLabel": "S'abonner pour débloquer les infos nutritionnelles",

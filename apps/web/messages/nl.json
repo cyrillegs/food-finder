@@ -38,7 +38,9 @@
     "loggingInLabel": "Bezig met inloggen…",
     "loginErrorMessage": "Ongeldig e-mailadres of wachtwoord.",
     "loginLinkLabel": "Inloggen",
-    "logoutLabel": "Uitloggen"
+    "logoutLabel": "Uitloggen",
+    "showPasswordLabel": "Wachtwoord tonen",
+    "hidePasswordLabel": "Wachtwoord verbergen"
   },
   "subscriptions": {
     "subscribeButtonLabel": "Abonneer om voedingswaarden te ontgrendelen",

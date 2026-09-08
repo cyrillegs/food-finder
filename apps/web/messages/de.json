@@ -38,7 +38,9 @@
     "loggingInLabel": "Anmeldung läuft…",
     "loginErrorMessage": "Ungültige E-Mail-Adresse oder ungültiges Passwort.",
     "loginLinkLabel": "Anmelden",
-    "logoutLabel": "Abmelden"
+    "logoutLabel": "Abmelden",
+    "showPasswordLabel": "Passwort anzeigen",
+    "hidePasswordLabel": "Passwort verbergen"
   },
   "subscriptions": {
     "subscribeButtonLabel": "Abonnieren, um Nährwertangaben freizuschalten",
