@@ -122,7 +122,7 @@ A scheduled job to periodically reset the demo user's subscription state was con
 
 ### Recent searches — dedup behavior
 
-Re-running the same query immediately (searching "nutella" twice in a row, or clicking the entry that's already at the top of the list) bumps that entry's timestamp instead of inserting a duplicate — so the panel doesn't fill up with repeats of the same query back-to-back. A query that resurfaces *after* other searches happened in between gets its own new row rather than jumping an older entry to the top, since that reflects "the user came back to this" rather than "the user re-submitted the same request." History is capped at the 10 most recent per user; the underlying table isn't pruned, only what's returned/rendered is.
+Re-running a query that already appears anywhere in a user's history bumps that entry's timestamp (moving it to the top) instead of inserting a duplicate — whether it's an immediate repeat or resurfaces after other searches happened in between. A query can only ever occupy one slot in the panel. History is capped at the 10 most recent per user; the underlying table isn't pruned, only what's returned/rendered is.
 
 ### Deployment
 

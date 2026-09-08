@@ -86,8 +86,8 @@ describe('recent-searches.service', () => {
       expect(recentSearchMocks.update).not.toHaveBeenCalled();
     });
 
-    it('creates a new row when the most recent query differs', async () => {
-      recentSearchMocks.findFirst.mockResolvedValue(row(1, 1, 'chocolate', new Date('2026-01-01T00:00:00Z')));
+    it('creates a new row when this query has never been searched by this user before', async () => {
+      recentSearchMocks.findFirst.mockResolvedValue(null);
 
       await recordSearch(1, 'nutella');
 
@@ -97,16 +97,22 @@ describe('recent-searches.service', () => {
       expect(recentSearchMocks.update).not.toHaveBeenCalled();
     });
 
-    // The core dedup decision: an immediate repeat of the most-recently-
-    // logged query (searching "nutella" twice in a row, or clicking a recent
-    // entry that's already the top one) bumps that row's timestamp instead
-    // of inserting a duplicate - so the panel never fills up with copies of
-    // the same query back-to-back.
-    it('bumps the existing row instead of creating a duplicate when the query repeats immediately', async () => {
+    // The core dedup decision (revised to be history-wide, not just the
+    // most-recent row - see the comment on recordSearch): repeating a query
+    // bumps its existing row's timestamp instead of creating a duplicate,
+    // regardless of how many other, different searches happened in between.
+    // Covers both an immediate repeat (searching "nutella" twice in a row)
+    // and a query resurfacing later (search nutella, then chocolate, then
+    // nutella again) - both must land on the SAME row, not two rows.
+    it('bumps the existing row instead of creating a duplicate, even if other searches happened in between', async () => {
       recentSearchMocks.findFirst.mockResolvedValue(row(7, 1, 'nutella', new Date('2026-01-01T00:00:00Z')));
 
       await recordSearch(1, 'nutella');
 
+      expect(recentSearchMocks.findFirst).toHaveBeenCalledWith({
+        where: { userId: 1, query: 'nutella' },
+        orderBy: { createdAt: 'desc' },
+      });
       expect(recentSearchMocks.update).toHaveBeenCalledWith({
         where: { id: 7 },
         data: { createdAt: expect.any(Date) },
@@ -134,13 +140,13 @@ describe('recent-searches.service', () => {
       expect(recentSearchMocks.update).not.toHaveBeenCalled();
     });
 
-    it('scopes the lookup to the given user id, not any other user', async () => {
+    it('scopes the lookup to the given user id and query, not any other user', async () => {
       recentSearchMocks.findFirst.mockResolvedValue(null);
 
       await recordSearch(42, 'nutella');
 
       expect(recentSearchMocks.findFirst).toHaveBeenCalledWith({
-        where: { userId: 42 },
+        where: { userId: 42, query: 'nutella' },
         orderBy: { createdAt: 'desc' },
       });
     });
