@@ -1,6 +1,7 @@
 {
   "common": {
-    "title": "Food Finder"
+    "title": "Food Finder",
+    "description": "Suche verpackte Lebensmittel nach Name oder Marke – auf Englisch, Niederländisch, Deutsch und Französisch. Ausführliche Nährwertangaben sind für Abonnenten verfügbar."
   },
   "languageSwitcher": {
     "label": "Sprache",

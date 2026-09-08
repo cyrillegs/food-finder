@@ -111,6 +111,7 @@ jobs:
         run: |
           docker build -f apps/web/Dockerfile \
             --build-arg NEXT_PUBLIC_API_BASE_URL=https://food-finder-api.cdlegaspi.site \
+            --build-arg NEXT_PUBLIC_SITE_URL=https://food-finder.cdlegaspi.site \
             -t food-finder-web:ci .
 
   # Deploys web/api on Dokploy after both gates above pass. main only, so PR

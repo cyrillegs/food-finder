@@ -1,6 +1,7 @@
 {
   "common": {
-    "title": "Food Finder"
+    "title": "Food Finder",
+    "description": "Zoek verpakte voedingsproducten op naam of merk, in het Engels, Nederlands, Duits en Frans. Uitgebreide voedingswaarden zijn beschikbaar voor abonnees."
   },
   "languageSwitcher": {
     "label": "Taal",

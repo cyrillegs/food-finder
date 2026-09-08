@@ -48,11 +48,42 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+// Localized per request, so a link shared from /fr previews in French.
+// The icon and the social-preview image themselves come from the
+// app/icon.svg and app/opengraph-image.png file conventions - Next injects
+// the tags for those automatically, so they are deliberately not repeated
+// here. The OG image is a pre-rendered static PNG rather than a next/og
+// ImageResponse: nothing then has to load fonts or run an image renderer in
+// the request path of a deployed container.
+//
+// metadataBase resolves the relative OG image path to an absolute URL, which
+// scrapers require. NEXT_PUBLIC_API_BASE_URL is the API's origin, not the
+// site's, so it can't be reused here; falling back to localhost keeps dev
+// working and only affects preview cards, never the app itself.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'common' });
+  const title = t('title');
+  const description = t('description');
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+
   return {
-    title: t('title'),
+    metadataBase: new URL(siteUrl),
+    title,
+    description,
+    openGraph: {
+      type: 'website',
+      siteName: title,
+      title,
+      description,
+      locale,
+      url: `${siteUrl}/${locale}`,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
   };
 }
 

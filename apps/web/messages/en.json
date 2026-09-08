@@ -1,6 +1,7 @@
 {
   "common": {
-    "title": "Food Finder"
+    "title": "Food Finder",
+    "description": "Search packaged food products by name or brand, in English, Dutch, German and French. Detailed nutrition data is available to subscribers."
   },
   "languageSwitcher": {
     "label": "Language",
