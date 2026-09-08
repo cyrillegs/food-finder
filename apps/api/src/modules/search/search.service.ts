@@ -98,33 +98,45 @@ export async function searchProducts({ query, locale, page, pageSize }: SearchPa
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  let response: Response;
+  let data: OffSearchResponse;
+  // The timeout deliberately stays armed until the body is fully read, not
+  // just until headers arrive. Clearing it after `fetch` resolves would
+  // leave `response.json()` with no deadline at all - and a server that
+  // sends headers promptly then stalls mid-body would hang this Express
+  // request forever rather than producing the 504 this is here to produce.
+  // Not hypothetical for this upstream: Open Food Facts' hosts have been
+  // observed timing out at the connection level for tens of seconds.
   try {
-    response = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/json',
-      },
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new SearchUpstreamError('Search request to Open Food Facts timed out.', 504);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new SearchUpstreamError('Search request to Open Food Facts timed out.', 504);
+      }
+      throw new SearchUpstreamError('Failed to reach the Open Food Facts search service.', 502);
     }
-    throw new SearchUpstreamError('Failed to reach the Open Food Facts search service.', 502);
+
+    if (!response.ok) {
+      throw new SearchUpstreamError(`Open Food Facts search service responded with status ${response.status}.`, 502);
+    }
+
+    try {
+      data = (await response.json()) as OffSearchResponse;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new SearchUpstreamError('Search request to Open Food Facts timed out.', 504);
+      }
+      throw new SearchUpstreamError('Received an invalid response from the Open Food Facts search service.', 502);
+    }
   } finally {
     clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    throw new SearchUpstreamError(`Open Food Facts search service responded with status ${response.status}.`, 502);
-  }
-
-  let data: OffSearchResponse;
-  try {
-    data = (await response.json()) as OffSearchResponse;
-  } catch {
-    throw new SearchUpstreamError('Received an invalid response from the Open Food Facts search service.', 502);
   }
 
   const results = (data.hits ?? [])

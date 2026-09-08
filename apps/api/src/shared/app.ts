@@ -19,9 +19,16 @@ export function createApp() {
   // origin - `origin` here was already a specific configured value before
   // auth existed (not '*'), so this only adds the flag, it doesn't need to
   // change how the origin itself is resolved.
+  // `||`, not `??`: an env var that is *set but empty* (easy to do in a
+  // hosting dashboard) is a misconfiguration, not a deliberate value, and
+  // `??` would pass that empty string straight through to the cors
+  // middleware - which then stops echoing a specific origin while
+  // `credentials: true` is still set, a combination browsers reject
+  // outright. Falling back to the local dev origin makes that failure
+  // loud and local instead of silent and production-only.
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+      origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
       credentials: true,
     }),
   );

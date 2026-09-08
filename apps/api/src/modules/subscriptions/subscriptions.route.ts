@@ -18,7 +18,7 @@
 // Adding a status endpoint here would just be a second way to ask a
 // question the Search response already answers.
 import { Router, type Request, type Response } from 'express';
-import { createCheckoutSession } from './subscriptions.service';
+import { AlreadySubscribedError, createCheckoutSession } from './subscriptions.service';
 import { SUPPORTED_LOCALES, type SupportedLocale } from '../search/search.types';
 import { requireAuth } from '../auth/auth.middleware';
 
@@ -41,6 +41,18 @@ subscriptionsRouter.post('/checkout-session', requireAuth, async (req: Request, 
   const locale = resolveLocale((req.body as { locale?: unknown } | undefined)?.locale);
   // requireAuth has already 401'd and returned if there's no logged-in user,
   // so req.user is guaranteed to be set by the time this handler runs.
-  const url = await createCheckoutSession(resolveWebOrigin(), locale, req.user!.id);
-  res.json({ url });
+  try {
+    const url = await createCheckoutSession(resolveWebOrigin(), locale, req.user!.id);
+    res.json({ url });
+  } catch (err) {
+    // 409, not 500: the user asked for something that no longer makes sense
+    // rather than hitting a failure. createCheckoutSession has already
+    // healed their row from Stripe's answer by this point, so the frontend
+    // just needs to re-read state (see SubscribeButton.tsx).
+    if (err instanceof AlreadySubscribedError) {
+      res.status(409).json({ error: { message: err.message, code: 'already_subscribed' } });
+      return;
+    }
+    throw err;
+  }
 });
